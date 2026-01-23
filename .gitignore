@@ -1,0 +1,29 @@
+# Development files (not needed in production)
+node_modules/
+src/
+package.json
+package-lock.json
+vite.config.js
+jsconfig.json
+.eslintrc.cjs
+
+# Documentation files (optional - remove if you want to keep them)
+EXAMPLES.md
+INSTALL.md
+OPTIMIZATION.md
+STRIPE_EXPRESS_CHECKOUT_SETUP.md
+setup.bat
+setup.sh
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
