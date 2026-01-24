@@ -85,6 +85,35 @@ class DirectPay_Go_API {
             'callback' => [$this, 'validate_reference'],
             'permission_callback' => '__return_true',
         ]);
+        
+        // Calculate shipping for Express Checkout
+        register_rest_route($namespace, '/calculate-shipping', [
+            'methods' => 'POST',
+            'callback' => [$this, 'calculate_shipping'],
+            'permission_callback' => '__return_true',
+            'args' => [
+                'amount' => [
+                    'required' => true,
+                    'type' => 'number',
+                ],
+                'country' => [
+                    'required' => true,
+                    'type' => 'string',
+                ],
+                'state' => [
+                    'required' => false,
+                    'type' => 'string',
+                ],
+                'city' => [
+                    'required' => false,
+                    'type' => 'string',
+                ],
+                'postalCode' => [
+                    'required' => false,
+                    'type' => 'string',
+                ],
+            ],
+        ]);
     }
     
     /**
@@ -738,6 +767,74 @@ class DirectPay_Go_API {
      */
     private function format_price($price) {
         return wc_price($price);
+    }
+    
+    /**
+     * Calculate shipping rates for Express Checkout
+     */
+    public function calculate_shipping($request) {
+        try {
+            $params = $request->get_json_params();
+            
+            $amount = floatval($params['amount']);
+            $country = sanitize_text_field($params['country']);
+            $state = isset($params['state']) ? sanitize_text_field($params['state']) : '';
+            $city = isset($params['city']) ? sanitize_text_field($params['city']) : '';
+            $postcode = isset($params['postalCode']) ? sanitize_text_field($params['postalCode']) : '';
+            
+            error_log("DirectPay: Calculating shipping for {$country}, {$state}, {$city}, {$postcode}");
+            
+            // Initialize WooCommerce session if not already done
+            if (!WC()->session || !WC()->session->has_session()) {
+                WC()->session->set_customer_session_cookie(true);
+            }
+            
+            // Initialize cart with the amount
+            $this->initialize_cart($amount);
+            
+            // Set the shipping address
+            WC()->customer->set_shipping_country($country);
+            WC()->customer->set_shipping_state($state);
+            WC()->customer->set_shipping_city($city);
+            WC()->customer->set_shipping_postcode($postcode);
+            
+            // Calculate shipping
+            WC()->cart->calculate_shipping();
+            WC()->cart->calculate_totals();
+            
+            // Get available shipping methods
+            $packages = WC()->shipping()->get_packages();
+            $shipping_rates = [];
+            
+            if (!empty($packages)) {
+                foreach ($packages as $package_key => $package) {
+                    if (!empty($package['rates'])) {
+                        foreach ($package['rates'] as $rate) {
+                            $shipping_rates[] = [
+                                'id' => $rate->get_id(),
+                                'label' => $rate->get_label(),
+                                'amount' => floatval($rate->get_cost()),
+                            ];
+                        }
+                    }
+                }
+            }
+            
+            error_log("DirectPay: Found " . count($shipping_rates) . " shipping rates");
+            
+            return new WP_REST_Response([
+                'success' => true,
+                'shippingRates' => $shipping_rates,
+            ], 200);
+            
+        } catch (Exception $e) {
+            error_log("DirectPay: Error calculating shipping: " . $e->getMessage());
+            return new WP_Error(
+                'shipping_calculation_failed',
+                $e->getMessage(),
+                ['status' => 500]
+            );
+        }
     }
 }
 
