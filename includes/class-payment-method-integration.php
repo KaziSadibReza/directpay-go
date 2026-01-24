@@ -263,6 +263,7 @@ class DirectPay_Payment_Method_Integration {
             
             return new WP_REST_Response([
                 'clientSecret' => $response->client_secret,
+                'paymentIntentId' => $response->id, // Add payment intent ID
                 'publishableKey' => $publishable_key,
             ], 200);
             

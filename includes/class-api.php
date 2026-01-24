@@ -970,6 +970,7 @@ class DirectPay_Go_API {
             
             // Extract order data
             $reference = sanitize_text_field($params['reference']);
+            $payment_intent_id = isset($params['payment_intent_id']) ? sanitize_text_field($params['payment_intent_id']) : '';
             $amount = floatval($params['amount']);
             $shipping_cost = isset($params['shipping_cost']) ? floatval($params['shipping_cost']) : 0;
             $total = isset($params['total']) ? floatval($params['total']) : $amount;
@@ -1023,8 +1024,12 @@ class DirectPay_Go_API {
             $order->set_payment_method('stripe');
             $order->set_payment_method_title('Stripe (Express Checkout)');
             
-            // Set transaction ID to the reference for easy tracking
-            $order->set_transaction_id($reference);
+            // Set transaction ID to the Stripe payment intent ID
+            if (!empty($payment_intent_id)) {
+                $order->set_transaction_id($payment_intent_id);
+                $order->add_meta_data('Stripe Payment Intent ID', $payment_intent_id, true);
+                error_log("DirectPay: Payment intent ID: " . $payment_intent_id);
+            }
             
             // Calculate totals
             $order->calculate_totals();
