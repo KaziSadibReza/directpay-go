@@ -114,6 +114,13 @@ class DirectPay_Go_API {
                 ],
             ],
         ]);
+        
+        // Process Express Checkout payment
+        register_rest_route($namespace, '/process-express-payment', [
+            'methods' => 'POST',
+            'callback' => [$this, 'process_express_payment'],
+            'permission_callback' => '__return_true',
+        ]);
     }
     
     /**
@@ -950,6 +957,93 @@ class DirectPay_Go_API {
                 $e->getMessage(),
                 ['status' => 500]
             );
+        }
+    }
+    
+    /**
+     * Process Express Checkout payment
+     */
+    public function process_express_payment($request) {
+        try {
+            $params = $request->get_json_params();
+            error_log("DirectPay: Express payment request: " . print_r($params, true));
+            
+            // Extract order data
+            $reference = sanitize_text_field($params['reference']);
+            $amount = floatval($params['amount']);
+            $shipping_cost = isset($params['shipping_cost']) ? floatval($params['shipping_cost']) : 0;
+            $total = isset($params['total']) ? floatval($params['total']) : $amount;
+            
+            // Create WooCommerce order
+            $order = wc_create_order();
+            
+            // Add product (temporary product for payment)
+            $product_id = $this->get_or_create_temp_product();
+            $order->add_product(wc_get_product($product_id), 1, [
+                'subtotal' => $amount,
+                'total' => $amount,
+            ]);
+            
+            // Set billing address
+            $order->set_billing_first_name($params['first_name'] ?? '');
+            $order->set_billing_last_name($params['last_name'] ?? '');
+            $order->set_billing_address_1($params['billing_address_1'] ?? '');
+            $order->set_billing_address_2($params['billing_address_2'] ?? '');
+            $order->set_billing_city($params['billing_city'] ?? '');
+            $order->set_billing_state($params['billing_state'] ?? '');
+            $order->set_billing_postcode($params['billing_postcode'] ?? '');
+            $order->set_billing_country($params['billing_country'] ?? '');
+            $order->set_billing_email($params['email'] ?? '');
+            $order->set_billing_phone($params['phone'] ?? '');
+            
+            // Set shipping address
+            $order->set_shipping_first_name($params['shipping_first_name'] ?? $params['first_name'] ?? '');
+            $order->set_shipping_last_name($params['shipping_last_name'] ?? $params['last_name'] ?? '');
+            $order->set_shipping_address_1($params['shipping_address_1'] ?? '');
+            $order->set_shipping_address_2($params['shipping_address_2'] ?? '');
+            $order->set_shipping_city($params['shipping_city'] ?? '');
+            $order->set_shipping_state($params['shipping_state'] ?? '');
+            $order->set_shipping_postcode($params['shipping_postcode'] ?? '');
+            $order->set_shipping_country($params['shipping_country'] ?? '');
+            
+            // Add shipping if selected
+            if ($shipping_cost > 0 && isset($params['shipping_method'])) {
+                $shipping_item = new WC_Order_Item_Shipping();
+                $shipping_item->set_method_title('Flat rate');
+                $shipping_item->set_method_id($params['shipping_method']);
+                $shipping_item->set_total($shipping_cost);
+                $order->add_item($shipping_item);
+            }
+            
+            // Set order reference as custom meta
+            $order->add_meta_data('_directpay_reference', $reference, true);
+            
+            // Set payment method
+            $order->set_payment_method('stripe');
+            $order->set_payment_method_title('Stripe (Express Checkout)');
+            
+            // Calculate totals
+            $order->calculate_totals();
+            
+            // Save order
+            $order->save();
+            
+            error_log("DirectPay: Order created: " . $order->get_id());
+            error_log("DirectPay: Order total: " . $order->get_total());
+            
+            // Return success with order ID
+            return new WP_REST_Response([
+                'success' => true,
+                'order_id' => $order->get_id(),
+                'redirect_url' => $order->get_checkout_order_received_url(),
+            ], 200);
+            
+        } catch (Exception $e) {
+            error_log("DirectPay: Error processing express payment: " . $e->getMessage());
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 }
