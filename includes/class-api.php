@@ -782,11 +782,27 @@ class DirectPay_Go_API {
             $city = isset($params['city']) ? sanitize_text_field($params['city']) : '';
             $postcode = isset($params['postalCode']) ? sanitize_text_field($params['postalCode']) : '';
             
-            error_log("DirectPay: Calculating shipping for {$country}, {$state}, {$city}, {$postcode}");
+            error_log("DirectPay: Calculating shipping for {$country}, {$state}, {$city}, {$postcode}, amount: {$amount}");
             
-            // Initialize WooCommerce session if not already done
-            if (!WC()->session || !WC()->session->has_session()) {
-                WC()->session->set_customer_session_cookie(true);
+            // Initialize WooCommerce if not loaded
+            if (!did_action('woocommerce_init')) {
+                WC()->frontend_includes();
+            }
+            
+            // Initialize session
+            if (!WC()->session) {
+                WC()->session = new WC_Session_Handler();
+                WC()->session->init();
+            }
+            
+            // Initialize cart
+            if (!WC()->cart) {
+                WC()->cart = new WC_Cart();
+            }
+            
+            // Initialize customer
+            if (!WC()->customer) {
+                WC()->customer = new WC_Customer(get_current_user_id(), true);
             }
             
             // Initialize cart with the amount
@@ -798,16 +814,29 @@ class DirectPay_Go_API {
             WC()->customer->set_shipping_city($city);
             WC()->customer->set_shipping_postcode($postcode);
             
+            // Also set billing to match shipping for calculation
+            WC()->customer->set_billing_country($country);
+            WC()->customer->set_billing_state($state);
+            WC()->customer->set_billing_city($city);
+            WC()->customer->set_billing_postcode($postcode);
+            
+            error_log("DirectPay: Customer address set. Cart total: " . WC()->cart->get_cart_contents_total());
+            
             // Calculate shipping
             WC()->cart->calculate_shipping();
             WC()->cart->calculate_totals();
+            
+            error_log("DirectPay: Shipping calculated. Cart total with shipping: " . WC()->cart->get_total(''));
             
             // Get available shipping methods
             $packages = WC()->shipping()->get_packages();
             $shipping_rates = [];
             
+            error_log("DirectPay: Packages count: " . count($packages));
+            
             if (!empty($packages)) {
                 foreach ($packages as $package_key => $package) {
+                    error_log("DirectPay: Package {$package_key} has " . count($package['rates']) . " rates");
                     if (!empty($package['rates'])) {
                         foreach ($package['rates'] as $rate) {
                             $shipping_rates[] = [
@@ -815,6 +844,7 @@ class DirectPay_Go_API {
                                 'label' => $rate->get_label(),
                                 'amount' => floatval($rate->get_cost()),
                             ];
+                            error_log("DirectPay: Rate: " . $rate->get_label() . " - " . $rate->get_cost());
                         }
                     }
                 }
@@ -829,6 +859,15 @@ class DirectPay_Go_API {
             
         } catch (Exception $e) {
             error_log("DirectPay: Error calculating shipping: " . $e->getMessage());
+            error_log("DirectPay: Stack trace: " . $e->getTraceAsString());
+            return new WP_Error(
+                'shipping_calculation_failed',
+                $e->getMessage(),
+                ['status' => 500]
+            );
+        } catch (Error $e) {
+            error_log("DirectPay: Fatal error calculating shipping: " . $e->getMessage());
+            error_log("DirectPay: Stack trace: " . $e->getTraceAsString());
             return new WP_Error(
                 'shipping_calculation_failed',
                 $e->getMessage(),
