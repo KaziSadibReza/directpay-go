@@ -693,7 +693,7 @@ class DirectPay_Go_API {
      * This is necessary for payment gateways (like Stripe) to initialize properly
      * Payment gateways check if there's an actual cart with items before loading
      */
-    private function initialize_cart_with_amount($amount) {
+    private function initialize_cart_with_amount($amount, $calculate_totals = true) {
         // Initialize WooCommerce cart and session if not already done
         if (!WC()->cart) {
             WC()->frontend_includes();
@@ -721,10 +721,13 @@ class DirectPay_Go_API {
                 error_log("DirectPay: Cart item added with price: " . $amount);
             }
             
-            // Calculate totals
-            WC()->cart->calculate_totals();
-            
-            error_log("DirectPay: Cart initialized with amount: " . $amount . " | Cart total: " . WC()->cart->get_total('edit'));
+            // Only calculate totals if requested (skip for shipping calculation to avoid premature shipping addition)
+            if ($calculate_totals) {
+                WC()->cart->calculate_totals();
+                error_log("DirectPay: Cart initialized with amount: " . $amount . " | Cart total: " . WC()->cart->get_total('edit'));
+            } else {
+                error_log("DirectPay: Cart initialized with amount: " . $amount . " | Totals NOT calculated yet");
+            }
         }
     }
     
@@ -830,8 +833,8 @@ class DirectPay_Go_API {
                 WC()->customer = new WC_Customer(get_current_user_id(), true);
             }
             
-            // Initialize cart with the amount
-            $this->initialize_cart_with_amount($amount);
+            // Initialize cart with the amount (WITHOUT calculating totals yet)
+            $this->initialize_cart_with_amount($amount, false); // Pass false to skip totals calculation
             
             // Set the shipping address
             WC()->customer->set_shipping_country($country);
@@ -847,7 +850,7 @@ class DirectPay_Go_API {
             
             error_log("DirectPay: Customer address set. Cart total: " . WC()->cart->get_cart_contents_total());
             
-            // Calculate shipping
+            // NOW calculate shipping with the correct address
             WC()->cart->calculate_shipping();
             WC()->cart->calculate_totals();
             
