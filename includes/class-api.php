@@ -731,33 +731,60 @@ class DirectPay_Go_API {
     }
     
     /**
-     * Get or create a temporary virtual product for checkout
+     * Get or create a temporary product for checkout
      * This product is used to hold the custom amount in the cart
+     * Auto-recreates if product was deleted or is virtual (needs to be shippable)
      */
     private function get_or_create_temp_product() {
         $product_id = get_option('directpay_temp_product_id');
         
-        // Check if product exists
-        if ($product_id && get_post($product_id)) {
-            return $product_id;
+        // Check if product exists and is valid
+        if ($product_id) {
+            $post = get_post($product_id);
+            
+            // If product was deleted, clear the option
+            if (!$post || $post->post_type !== 'product') {
+                error_log("DirectPay: Stored product ID {$product_id} not found or invalid, will create new");
+                delete_option('directpay_temp_product_id');
+                $product_id = false;
+            } else {
+                // Check if existing product is virtual (needs to be shippable)
+                $existing_product = wc_get_product($product_id);
+                if ($existing_product && $existing_product->is_virtual()) {
+                    error_log("DirectPay: Existing product is virtual, recreating as shippable");
+                    wp_delete_post($product_id, true); // Force delete
+                    delete_option('directpay_temp_product_id');
+                    $product_id = false;
+                } else {
+                    // Product exists and is valid
+                    error_log("DirectPay: Using existing temporary product ID: " . $product_id);
+                    return $product_id;
+                }
+            }
         }
         
         // Create new temporary product
+        error_log("DirectPay: Creating new temporary product...");
         $product = new WC_Product_Simple();
         $product->set_name('DirectPay Custom Order');
-        $product->set_status('publish'); // CHANGED: Must be published for payment gateways to work
+        $product->set_status('publish'); // Must be published for payment gateways to work
         $product->set_catalog_visibility('hidden'); // Hidden from store but still valid
-        $product->set_virtual(false); // CHANGED: Needs shipping so WooCommerce calculates shipping rates
+        $product->set_virtual(false); // IMPORTANT: Must be shippable for WooCommerce to calculate shipping
         $product->set_sold_individually(true);
         $product->set_price(100); // Set a default price (will be overridden)
         $product->set_regular_price(100);
         
         $product_id = $product->save();
         
+        if (!$product_id) {
+            error_log("DirectPay: ERROR - Failed to create temporary product");
+            return false;
+        }
+        
         // Save product ID for reuse
         update_option('directpay_temp_product_id', $product_id);
         
-        error_log("DirectPay: Created temporary product ID: " . $product_id);
+        error_log("DirectPay: Successfully created temporary product ID: " . $product_id);
         
         return $product_id;
     }
