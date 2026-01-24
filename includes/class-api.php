@@ -790,7 +790,7 @@ class DirectPay_Go_API {
             }
             
             // Initialize cart with the amount
-            $this->initialize_cart($amount);
+            $this->initialize_cart_with_amount($amount);
             
             // Set the shipping address
             WC()->customer->set_shipping_country($country);
