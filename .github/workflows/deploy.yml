@@ -1,0 +1,40 @@
+name: Deploy Theme to Hostinger via SFTP
+
+on:
+  push:
+    branches:
+      - main # Trigger deployment when changes are pushed to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }} # Use the SSH private key from GitHub secrets
+
+      - name: Deploy Themes
+        uses: SamKirkland/web-deploy@v1
+        with:
+          target-server: ${{ secrets.FTP_HOST }} # Your server IP
+          remote-user: ${{ secrets.FTP_USER }} # Your SSH username
+          private-ssh-key: ${{ secrets.SSH_KEY }} # The private key used for SSH authentication
+          ssh-port: ${{ secrets.FTP_PORT }} # Custom SSH port
+          source-path: ./ # The local directory to upload
+          destination-path: /home/u498333806/domains/checkout.abdulfardaus.com/public_html/wp-content/plugins/directpay-go/ # Remote path on the server
+
+
+      #- name: Deploy Plugins
+      # uses: SamKirkland/web-deploy@v1
+      # with:
+      #    target-server: ${{ secrets.FTP_HOST }} # Your server IP
+      #    remote-user: ${{ secrets.FTP_USER }} # Your SSH username
+      #    private-ssh-key: ${{ secrets.SSH_KEY }} # The private key used for SSH authentication
+      #    ssh-port: ${{ secrets.FTP_PORT }} # Custom SSH port
+      #    source-path: ./wp-content/plugins/smart-login-registration # The local directory to upload
+      #    destination-path: /home/u868324961/domains/dreamifye.com/public_html/wp-content/plugins # Remote path on the server
