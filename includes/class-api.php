@@ -747,7 +747,7 @@ class DirectPay_Go_API {
         $product->set_name('DirectPay Custom Order');
         $product->set_status('publish'); // CHANGED: Must be published for payment gateways to work
         $product->set_catalog_visibility('hidden'); // Hidden from store but still valid
-        $product->set_virtual(true); // No shipping needed
+        $product->set_virtual(false); // CHANGED: Needs shipping so WooCommerce calculates shipping rates
         $product->set_sold_individually(true);
         $product->set_price(100); // Set a default price (will be overridden)
         $product->set_regular_price(100);
