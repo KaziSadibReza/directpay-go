@@ -1015,21 +1015,37 @@ class DirectPay_Go_API {
                 $order->add_item($shipping_item);
             }
             
-            // Set order reference as custom meta
-            $order->add_meta_data('_directpay_reference', $reference, true);
+            // Set order reference as custom meta (visible in admin)
+            $order->add_meta_data('DirectPay Reference', $reference, true);
+            $order->add_meta_data('_directpay_reference', $reference, true); // Also save with underscore for programmatic access
             
             // Set payment method
             $order->set_payment_method('stripe');
             $order->set_payment_method_title('Stripe (Express Checkout)');
             
+            // Set transaction ID to the reference for easy tracking
+            $order->set_transaction_id($reference);
+            
             // Calculate totals
             $order->calculate_totals();
+            
+            // Payment was already confirmed by Stripe on the client side
+            // Mark order as processing (payment completed)
+            $order->set_status('processing', __('Payment completed via Stripe Express Checkout.', 'directpay-go'));
+            $order->payment_complete();
+            
+            // Add order note
+            $order->add_order_note(sprintf(
+                __('Express Checkout payment completed. Reference: %s', 'directpay-go'),
+                $reference
+            ));
             
             // Save order
             $order->save();
             
-            error_log("DirectPay: Order created: " . $order->get_id());
+            error_log("DirectPay: Order created and marked as processing: " . $order->get_id());
             error_log("DirectPay: Order total: " . $order->get_total());
+            error_log("DirectPay: Reference: " . $reference);
             
             // Return success with order ID
             return new WP_REST_Response([
