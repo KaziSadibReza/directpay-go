@@ -901,9 +901,37 @@ class DirectPay_Go_API {
             
             error_log("DirectPay: Found " . count($shipping_rates) . " shipping rates");
             
+            // Calculate line items for display
+            $line_items = [];
+            
+            // Add product line item
+            $line_items[] = [
+                'label' => 'Product',
+                'amount' => $amount,
+            ];
+            
+            // Add shipping line item if there are shipping rates
+            if (!empty($shipping_rates)) {
+                $first_shipping_rate = $shipping_rates[0];
+                $line_items[] = [
+                    'label' => $first_shipping_rate['label'],
+                    'amount' => $first_shipping_rate['amount'],
+                ];
+            }
+            
+            // Calculate total (product + shipping)
+            $total_amount = $amount;
+            if (!empty($shipping_rates)) {
+                $total_amount += $shipping_rates[0]['amount'];
+            }
+            
+            error_log("DirectPay: Returning - Product: {$amount}, Shipping: " . ($shipping_rates[0]['amount'] ?? 0) . ", Total: {$total_amount}");
+            
             return new WP_REST_Response([
                 'success' => true,
                 'shippingRates' => $shipping_rates,
+                'lineItems' => $line_items,
+                'total' => $total_amount,
             ], 200);
             
         } catch (Exception $e) {
