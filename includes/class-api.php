@@ -693,7 +693,7 @@ class DirectPay_Go_API {
      * This is necessary for payment gateways (like Stripe) to initialize properly
      * Payment gateways check if there's an actual cart with items before loading
      */
-    private function initialize_cart_with_amount($amount, $calculate_totals = true) {
+    private function initialize_cart_with_amount($amount, $calculate_totals = true, $product_id = null) {
         // Initialize WooCommerce cart and session if not already done
         if (!WC()->cart) {
             WC()->frontend_includes();
@@ -707,9 +707,26 @@ class DirectPay_Go_API {
         WC()->cart->empty_cart();
         
         // Create or get a temporary product
-        $product_id = $this->get_or_create_temp_product();
+        if (!$product_id) {
+            $product_id = $this->get_or_create_temp_product();
+        }
         
         if ($product_id) {
+            // Add filter to force the custom price to persist through all WooCommerce calculations
+            add_filter('woocommerce_product_get_price', function($price, $product) use ($amount, $product_id) {
+                if ($product->get_id() == $product_id) {
+                    return $amount;
+                }
+                return $price;
+            }, 99, 2);
+            
+            add_filter('woocommerce_product_get_regular_price', function($price, $product) use ($amount, $product_id) {
+                if ($product->get_id() == $product_id) {
+                    return $amount;
+                }
+                return $price;
+            }, 99, 2);
+            
             // Add product to cart
             $cart_item_key = WC()->cart->add_to_cart($product_id, 1);
             
@@ -717,6 +734,7 @@ class DirectPay_Go_API {
                 // IMPORTANT: Set the price directly on the cart item
                 // This ensures the correct price is used during shipping calculation
                 WC()->cart->cart_contents[$cart_item_key]['data']->set_price($amount);
+                WC()->cart->cart_contents[$cart_item_key]['data']->set_regular_price($amount);
                 
                 error_log("DirectPay: Cart item added with price: " . $amount);
             }
@@ -729,6 +747,8 @@ class DirectPay_Go_API {
                 error_log("DirectPay: Cart initialized with amount: " . $amount . " | Totals NOT calculated yet");
             }
         }
+        
+        return $product_id;
     }
     
     /**
@@ -834,7 +854,8 @@ class DirectPay_Go_API {
             }
             
             // Initialize cart with the amount (WITHOUT calculating totals yet)
-            $this->initialize_cart_with_amount($amount, false); // Pass false to skip totals calculation
+            $product_id = $this->get_or_create_temp_product();
+            $this->initialize_cart_with_amount($amount, false, $product_id); // Pass false to skip totals calculation
             
             // Set the shipping address
             WC()->customer->set_shipping_country($country);
