@@ -706,22 +706,20 @@ class DirectPay_Go_API {
         // Clear existing cart
         WC()->cart->empty_cart();
         
-        // Create or get a temporary virtual product
+        // Create or get a temporary product
         $product_id = $this->get_or_create_temp_product();
         
         if ($product_id) {
-            // Add product to cart with the specified amount
-            WC()->cart->add_to_cart($product_id, 1, 0, [], [
-                'custom_price' => $amount,
-            ]);
+            // Add product to cart
+            $cart_item_key = WC()->cart->add_to_cart($product_id, 1);
             
-            // Set custom price for the cart item
-            add_filter('woocommerce_product_get_price', function($price, $product) use ($amount, $product_id) {
-                if ($product->get_id() == $product_id) {
-                    return $amount;
-                }
-                return $price;
-            }, 10, 2);
+            if ($cart_item_key) {
+                // IMPORTANT: Set the price directly on the cart item
+                // This ensures the correct price is used during shipping calculation
+                WC()->cart->cart_contents[$cart_item_key]['data']->set_price($amount);
+                
+                error_log("DirectPay: Cart item added with price: " . $amount);
+            }
             
             // Calculate totals
             WC()->cart->calculate_totals();
