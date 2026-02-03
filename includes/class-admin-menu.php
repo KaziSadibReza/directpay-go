@@ -155,10 +155,24 @@ class DirectPay_Admin_Menu {
             DIRECTPAY_GO_VERSION
         );
         
-        // Enqueue React admin app
+        // Check if we should use dev server or production build
+        $manifest_path = DIRECTPAY_GO_PLUGIN_DIR . 'dist/.vite/manifest.json';
+        
+        if (file_exists($manifest_path)) {
+            // Production mode: Load from manifest
+            $this->enqueue_from_manifest($hook);
+        } else {
+            // Development mode: Use Vite dev server
+            $this->enqueue_dev_server($hook);
+        }
+    }
+    
+    /**
+     * Enqueue dev server scripts
+     */
+    private function enqueue_dev_server($hook) {
         $dev_server = 'http://localhost:3000';
         
-        // Vite client for HMR
         add_action('admin_head', function() use ($dev_server, $hook) {
             echo '<script type="module" src="' . esc_url($dev_server . '/@vite/client') . '"></script>' . "\n";
             
@@ -180,34 +194,78 @@ class DirectPay_Admin_Menu {
     /**
      * Enqueue assets from Vite manifest (for production)
      */
-    private function enqueue_from_manifest() {
+    private function enqueue_from_manifest($hook) {
         $manifest_file = DIRECTPAY_GO_PLUGIN_DIR . 'dist/.vite/manifest.json';
         $manifest = json_decode(file_get_contents($manifest_file), true);
         
-        if (isset($manifest['src/admin/admin.jsx'])) {
-            $admin_entry = $manifest['src/admin/admin.jsx'];
-            
-            // Enqueue admin JS
-            wp_enqueue_script(
-                'directpay-admin-app',
-                DIRECTPAY_GO_PLUGIN_URL . 'dist/' . $admin_entry['file'],
-                ['wp-element'],
-                DIRECTPAY_GO_VERSION,
-                true
-            );
-            
-            // Enqueue admin CSS if exists
-            if (!empty($admin_entry['css'])) {
-                foreach ($admin_entry['css'] as $css_file) {
-                    wp_enqueue_style(
-                        'directpay-admin-app',
-                        DIRECTPAY_GO_PLUGIN_URL . 'dist/' . $css_file,
-                        [],
-                        DIRECTPAY_GO_VERSION
-                    );
+        // Determine which entry to load based on the page
+        $entry_key = '';
+        $handle_prefix = '';
+        
+        if (strpos($hook, 'toplevel_page_directpay-go') !== false) {
+            // Sessions page
+            $entry_key = 'src/admin/sessions-admin.jsx';
+            $handle_prefix = 'directpay-sessions';
+        } elseif (strpos($hook, 'directpay-orders') !== false) {
+            // Orders page
+            $entry_key = 'src/admin/orders-admin.jsx';
+            $handle_prefix = 'directpay-orders';
+        } elseif (strpos($hook, 'directpay-shipping') !== false) {
+            // Shipping Methods page
+            $entry_key = 'src/admin/admin.jsx';
+            $handle_prefix = 'directpay-shipping';
+        }
+        
+        if (!$entry_key || !isset($manifest[$entry_key])) {
+            return;
+        }
+        
+        $entry = $manifest[$entry_key];
+        
+        // Enqueue CSS files
+        if (!empty($entry['css'])) {
+            foreach ($entry['css'] as $index => $css_file) {
+                wp_enqueue_style(
+                    $handle_prefix . '-style-' . $index,
+                    DIRECTPAY_GO_PLUGIN_URL . 'dist/' . $css_file,
+                    [],
+                    DIRECTPAY_GO_VERSION
+                );
+            }
+        }
+        
+        // Enqueue imported CSS (like CustomDropdown)
+        if (!empty($entry['imports'])) {
+            foreach ($entry['imports'] as $import_key) {
+                if (isset($manifest[$import_key]) && !empty($manifest[$import_key]['css'])) {
+                    foreach ($manifest[$import_key]['css'] as $index => $css_file) {
+                        wp_enqueue_style(
+                            $handle_prefix . '-import-style-' . $index,
+                            DIRECTPAY_GO_PLUGIN_URL . 'dist/' . $css_file,
+                            [],
+                            DIRECTPAY_GO_VERSION
+                        );
+                    }
                 }
             }
         }
+        
+        // Enqueue JS
+        wp_enqueue_script(
+            $handle_prefix . '-app',
+            DIRECTPAY_GO_PLUGIN_URL . 'dist/' . $entry['file'],
+            [],
+            DIRECTPAY_GO_VERSION,
+            true
+        );
+        
+        // Add module type attribute
+        add_filter('script_loader_tag', function($tag, $handle) use ($handle_prefix) {
+            if (strpos($handle, $handle_prefix) !== false) {
+                $tag = str_replace('<script ', '<script type="module" ', $tag);
+            }
+            return $tag;
+        }, 10, 2);
     }
 }
 

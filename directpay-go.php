@@ -167,27 +167,52 @@ class DirectPay_Go {
             $manifest = json_decode(file_get_contents($manifest_path), true);
             
             if (isset($manifest['src/main.jsx'])) {
-                $main_js = $manifest['src/main.jsx']['file'];
-                $main_css = $manifest['src/main.jsx']['css'][0] ?? null;
+                $entry = $manifest['src/main.jsx'];
+                
+                // Enqueue all CSS files from the main entry
+                if (!empty($entry['css'])) {
+                    foreach ($entry['css'] as $index => $css_file) {
+                        wp_enqueue_style(
+                            'directpay-go-style-' . $index,
+                            $dist_url . $css_file,
+                            [],
+                            null
+                        );
+                    }
+                }
+                
+                // Enqueue CSS from imported modules (like CustomDropdown)
+                if (!empty($entry['imports'])) {
+                    foreach ($entry['imports'] as $import_key) {
+                        if (isset($manifest[$import_key]) && !empty($manifest[$import_key]['css'])) {
+                            foreach ($manifest[$import_key]['css'] as $index => $css_file) {
+                                wp_enqueue_style(
+                                    'directpay-go-import-style-' . $index,
+                                    $dist_url . $css_file,
+                                    [],
+                                    null
+                                );
+                            }
+                        }
+                    }
+                }
                 
                 // Enqueue JS
                 wp_enqueue_script(
                     'directpay-go-app',
-                    $dist_url . $main_js,
+                    $dist_url . $entry['file'],
                     [],
                     null,
                     true
                 );
                 
-                // Enqueue CSS
-                if ($main_css) {
-                    wp_enqueue_style(
-                        'directpay-go-style',
-                        $dist_url . $main_css,
-                        [],
-                        null
-                    );
-                }
+                // Add module type for production build
+                add_filter('script_loader_tag', function($tag, $handle) {
+                    if ($handle === 'directpay-go-app') {
+                        $tag = str_replace('<script ', '<script type="module" ', $tag);
+                    }
+                    return $tag;
+                }, 10, 2);
             }
         } else {
             // Development mode: Use Vite dev server
