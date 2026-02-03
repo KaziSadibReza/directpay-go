@@ -1,5 +1,15 @@
 /* DirectPay Go Admin Styles */
 
+/* Animations */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .directpay-admin-card {
     background: #fff;
     border: 1px solid #ccd0d4;

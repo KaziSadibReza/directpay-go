@@ -69,10 +69,16 @@ class DirectPay_Go {
         require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-payment-method-integration.php';
         require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-api.php';
         require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-order.php';
+        require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-shipping-handler.php';
+        require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-shipping-session.php';
+        
+        // Shipping method
+        require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-wc-shipping-directpay.php';
         
         // Admin area
         if (is_admin()) {
             require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-admin.php';
+            require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-admin-menu.php';
         }
     }
     
@@ -90,9 +96,23 @@ class DirectPay_Go {
         // Declare WooCommerce HPOS compatibility
         add_action('before_woocommerce_init', [$this, 'declare_woocommerce_compatibility']);
         
+        // Register shipping methods
+        add_filter('woocommerce_shipping_methods', [$this, 'register_shipping_methods']);
+        
+        // Save pickup location on order
+        add_action('woocommerce_checkout_update_order_meta', [$this, 'save_shipping_pickup_location']);
+        
+        // Display shipping info in admin order - Disabled, using meta boxes instead
+        // add_action('woocommerce_admin_order_data_after_shipping_address', [$this, 'display_shipping_info_in_admin']);
+        
+        // Display shipping info in customer emails
+        add_action('woocommerce_email_after_order_table', [$this, 'display_shipping_info_in_email'], 10, 4);
+        
         // Initialize admin
         if (is_admin()) {
             new DirectPayGo\Admin();
+            // Initialize order admin hooks
+            DirectPay_Go_Order::init_admin_hooks();
         }
     }
     
@@ -130,6 +150,9 @@ class DirectPay_Go {
         if (!$post || !has_shortcode($post->post_content, 'directpay_checkout')) {
             return;
         }
+        
+        // Enqueue jQuery for Mondial Relay widget
+        wp_enqueue_script('jquery');
         
         // Payment gateway scripts are handled by DirectPay_Payment_Method_Integration class
         
@@ -194,17 +217,24 @@ class DirectPay_Go {
         }
         
         // Localize script with config
+        
+        // Get WooCommerce countries
+        $countries_obj = new WC_Countries();
+        $countries = $countries_obj->get_countries();
+        
         wp_localize_script('directpay-go-app', 'directPayConfig', [
             'apiUrl' => rest_url('directpay/v1'),
             'nonce' => wp_create_nonce('wp_rest'),
             'storeApiUrl' => rest_url('wc/store/v1'),
             'locale' => get_locale(),
             'currency' => get_woocommerce_currency(),
-            'currencySymbol' => get_woocommerce_currency_symbol(),
+            'currencySymbol' => html_entity_decode(get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8'),
             'currencyPosition' => get_option('woocommerce_currency_pos', 'left'),
             'currencyDecimalSeparator' => wc_get_price_decimal_separator(),
             'currencyThousandSeparator' => wc_get_price_thousand_separator(),
             'currencyDecimals' => wc_get_price_decimals(),
+            'countries' => $countries,
+            'defaultCountry' => $countries_obj->get_base_country(),
             'translations' => $this->get_translations(),
         ]);
     }
@@ -228,7 +258,6 @@ class DirectPay_Go {
             'postcode_label' => __('Postal Code', 'directpay-go'),
             'country_label' => __('Country', 'directpay-go'),
             'phone_label' => __('Phone', 'directpay-go'),
-            'shipping_method_label' => __('Shipping Method', 'directpay-go'),
             'payment_method_label' => __('Payment Method', 'directpay-go'),
             'place_order_button' => __('Place Order', 'directpay-go'),
             'processing' => __('Processing...', 'directpay-go'),
@@ -299,6 +328,80 @@ class DirectPay_Go {
         // These provide jQuery events that gateways depend on
         if (!wp_script_is('wc-checkout', 'enqueued')) {
             wp_enqueue_script('wc-checkout');
+        }
+    }
+    
+    /**
+     * Register custom shipping method
+     */
+    public function register_shipping_methods($methods) {
+        $methods['directpay_shipping'] = 'WC_Shipping_DirectPay';
+        return $methods;
+    }
+    
+    /**
+     * Save pickup location on order
+     */
+    public function save_shipping_pickup_location($order_id) {
+        if (isset($_POST['directpay_pickup_location'])) {
+            $location_data = json_decode(stripslashes($_POST['directpay_pickup_location']), true);
+            if ($location_data) {
+                update_post_meta($order_id, '_directpay_pickup_location', $location_data);
+            }
+        }
+        
+        if (isset($_POST['directpay_delivery_type'])) {
+            update_post_meta($order_id, '_directpay_delivery_type', sanitize_text_field($_POST['directpay_delivery_type']));
+        }
+        
+        if (isset($_POST['directpay_shipping_method'])) {
+            update_post_meta($order_id, '_directpay_shipping_method', sanitize_text_field($_POST['directpay_shipping_method']));
+        }
+    }
+    
+    
+    /**
+     * Display shipping info in customer emails
+     */
+    public function display_shipping_info_in_email($order, $sent_to_admin, $plain_text, $email) {
+        $location_data = $order->get_meta('_directpay_pickup_location');
+        $delivery_type = $order->get_meta('_directpay_delivery_type');
+        $shipping_method = $order->get_meta('_directpay_shipping_method');
+        
+        if (!$location_data) {
+            return;
+        }
+        
+        if ($plain_text) {
+            echo "\n" . __('Pickup Location:', 'directpay-go') . "\n";
+            echo ucfirst(str_replace('_', ' ', $shipping_method));
+            if ($delivery_type) {
+                echo ' - ' . ucfirst($delivery_type) . ' Delivery';
+            }
+            echo "\n";
+            
+            if (is_array($location_data)) {
+                echo $location_data['name'] . "\n";
+                echo $location_data['address'] . "\n";
+                echo $location_data['postalCode'] . ' ' . $location_data['city'] . "\n";
+                echo $location_data['country'] . "\n";
+            }
+        } else {
+            echo '<h2>' . esc_html__('Pickup Location', 'directpay-go') . '</h2>';
+            echo '<p><strong>' . esc_html(ucfirst(str_replace('_', ' ', $shipping_method))) . '</strong>';
+            if ($delivery_type) {
+                echo ' - <span style="color: #0066cc;">' . esc_html(ucfirst($delivery_type)) . ' Delivery</span>';
+            }
+            echo '</p>';
+            
+            if (is_array($location_data)) {
+                echo '<p>';
+                echo '<strong>' . esc_html($location_data['name']) . '</strong><br>';
+                echo esc_html($location_data['address']) . '<br>';
+                echo esc_html($location_data['postalCode']) . ' ' . esc_html($location_data['city']) . '<br>';
+                echo esc_html($location_data['country']);
+                echo '</p>';
+            }
         }
     }
 }

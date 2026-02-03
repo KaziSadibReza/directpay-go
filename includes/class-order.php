@@ -27,6 +27,11 @@ class DirectPay_Go_Order {
             $payment_method = sanitize_text_field($data['payment_method']);
             $locale = $data['locale'] ?? get_locale();
             $payment_intent_id = $data['payment_intent_id'] ?? null;
+            $pickup_point = $data['pickup_point'] ?? null;
+            $shipping_cost = isset($data['shipping_cost']) ? floatval($data['shipping_cost']) : 0;
+            $has_active_session = $data['has_active_session'] ?? false;
+            $session_id = $data['session_id'] ?? null;
+            $save_payment_method = $data['save_payment_method'] ?? false;
             
             // Validate amount
             if ($amount <= 0) {
@@ -36,10 +41,13 @@ class DirectPay_Go_Order {
                 );
             }
             
+            // Get customer ID (use current user if logged in, otherwise guest)
+            $customer_id = get_current_user_id();
+            
             // Create order
             $order = wc_create_order([
                 'status' => 'pending',
-                'customer_id' => 0, // Guest checkout
+                'customer_id' => $customer_id, // Use actual user ID if logged in
                 'created_via' => 'directpay_go',
             ]);
             
@@ -78,9 +86,9 @@ class DirectPay_Go_Order {
             // Add custom amount as a fee
             $this->add_custom_amount_to_order($order, $amount, $reference);
             
-            // Set shipping method if provided
-            if ($shipping_method) {
-                $this->set_shipping_method($order, $shipping_method);
+            // Add shipping if provided
+            if ($shipping_method && $shipping_cost > 0) {
+                $this->add_shipping_to_order($order, $shipping_method, $shipping_cost, $pickup_point);
             }
             
             // Save custom meta data
@@ -89,10 +97,70 @@ class DirectPay_Go_Order {
             $order->update_meta_data('_directpay_order', 'yes');
             $order->update_meta_data('_order_locale', $locale);
             
+            // Save pickup point data if provided
+            if ($pickup_point && is_array($pickup_point)) {
+                $order->update_meta_data('_pickup_point_id', sanitize_text_field($pickup_point['id']));
+                $order->update_meta_data('_pickup_point_name', sanitize_text_field($pickup_point['name']));
+                $order->update_meta_data('_pickup_point_address', sanitize_text_field($pickup_point['address']));
+                $order->update_meta_data('_pickup_point_city', sanitize_text_field($pickup_point['city']));
+                $order->update_meta_data('_pickup_point_zipcode', sanitize_text_field($pickup_point['zipCode']));
+                $order->update_meta_data('_pickup_point_carrier', sanitize_text_field($pickup_point['carrier']));
+                
+                // Add order note about pickup point
+                $order->add_order_note(
+                    sprintf(
+                        __('Pickup Point: %s - %s, %s %s (%s)', 'directpay-go'),
+                        $pickup_point['name'],
+                        $pickup_point['address'],
+                        $pickup_point['zipCode'],
+                        $pickup_point['city'],
+                        $pickup_point['carrier'] === 'mondial_relay' ? 'Mondial Relay' : 'Chronopost'
+                    )
+                );
+            }
+            
             // Save Stripe payment intent ID if provided
             if ($payment_intent_id) {
                 $order->update_meta_data('_stripe_intent_id', $payment_intent_id);
                 $order->update_meta_data('_transaction_id', $payment_intent_id);
+            }
+            
+            // Save payment method flag for tokenization (if user is logged in)
+            if ($customer_id > 0 && $save_payment_method) {
+                $order->update_meta_data('_wc_' . $payment_method . '_new_payment_method', 'true');
+                $order->add_order_note(__('Customer chose to save payment method', 'directpay-go'));
+            }
+            
+            // Handle shipping session
+            if ($has_active_session && $session_id) {
+                // Add to existing session
+                $session_data = get_transient('directpay_session_' . $session_id);
+                if ($session_data) {
+                    $order->update_meta_data('_directpay_session_id', $session_id);
+                    $order->update_meta_data('_directpay_session_order_number', ($session_data['order_count'] ?? 0) + 1);
+                    $order->update_meta_data('_directpay_shipping_paid', 'no');
+                    $order->update_meta_data('_directpay_first_order_id', $session_data['first_order_id'] ?? '');
+                    
+                    // Update session data
+                    $session_data['order_count'] = ($session_data['order_count'] ?? 0) + 1;
+                    $session_data['total_saved'] = ($session_data['total_saved'] ?? 0) + $shipping_cost;
+                    $session_data['last_order_id'] = $order->get_id();
+                    $session_data['last_order_time'] = time();
+                    
+                    // Update transient
+                    $remaining_time = $session_data['start_time'] + (get_option('directpay_shipping_session_hours', 5) * HOUR_IN_SECONDS) - time();
+                    set_transient('directpay_session_' . $session_id, $session_data, $remaining_time);
+                    
+                    $order->add_order_note(
+                        sprintf(
+                            __('Free shipping applied (Session Order #%d)', 'directpay-go'),
+                            $session_data['order_count']
+                        )
+                    );
+                }
+            } else if ($shipping_method) {
+                // First order - create new session
+                $order->update_meta_data('_directpay_shipping_paid', 'yes');
             }
             
             // Calculate totals AFTER adding items
@@ -122,6 +190,57 @@ class DirectPay_Go_Order {
                     $reference
                 )
             );
+            
+            // Handle shipping session after order is saved
+            if ($has_active_session && $session_id) {
+                // Already handled above in session section
+            } else if ($shipping_method && get_option('directpay_shipping_session_enabled', 'yes') === 'yes') {
+                // First order - create new session
+                $customer_identifier = $order->get_billing_email();
+                if (empty($customer_identifier) && $order->get_customer_id()) {
+                    $customer_identifier = 'user_' . $order->get_customer_id();
+                }
+                
+                if (!empty($customer_identifier)) {
+                    // Generate unique session ID
+                    $new_session_id = 'sess_' . wp_generate_password(32, false);
+                    
+                    $session_data = [
+                        'start_time' => time(),
+                        'first_order_id' => $order->get_id(),
+                        'customer_identifier' => $customer_identifier,
+                        'order_count' => 1,
+                        'total_saved' => 0
+                    ];
+                    
+                    // Store in transient
+                    $duration = absint(get_option('directpay_shipping_session_hours', 5)) * HOUR_IN_SECONDS;
+                    set_transient('directpay_session_' . $new_session_id, $session_data, $duration);
+                    
+                    // Set cookie
+                    $expire = time() + $duration;
+                    setcookie(
+                        'directpay_shipping_session',
+                        $new_session_id,
+                        $expire,
+                        COOKIEPATH ? COOKIEPATH : '/',
+                        COOKIE_DOMAIN,
+                        is_ssl(),
+                        true // httponly
+                    );
+                    
+                    // Update order meta
+                    $order->update_meta_data('_directpay_session_id', $new_session_id);
+                    $order->update_meta_data('_directpay_session_order_number', 1);
+                    $order->add_order_note(
+                        sprintf(
+                            __('New shipping session created. Free shipping on next orders for %s hours.', 'directpay-go'),
+                            get_option('directpay_shipping_session_hours', 5)
+                        )
+                    );
+                    $order->save();
+                }
+            }
             
             // Trigger order created action
             do_action('directpay_go_order_created', $order, $data);
@@ -172,7 +291,66 @@ class DirectPay_Go_Order {
     }
     
     /**
-     * Set shipping method for order
+     * Add shipping to order with cost
+     * 
+     * @param WC_Order $order Order object
+     * @param string $shipping_method_id Shipping method ID
+     * @param float $shipping_cost Shipping cost
+     * @param array $pickup_point Pickup point data
+     */
+    private function add_shipping_to_order($order, $shipping_method_id, $shipping_cost, $pickup_point = null) {
+        try {
+            // Parse shipping method ID (format: directpay_shipping_chronopost_express)
+            $parts = explode('_', $shipping_method_id);
+            $provider = $parts[2] ?? 'directpay';
+            $delivery_type = $parts[3] ?? 'normal';
+            
+            // Format provider name
+            $provider_name = ucfirst(str_replace('_', ' ', $provider));
+            $delivery_label = ucfirst($delivery_type);
+            
+            // Create shipping line item
+            $item = new WC_Order_Item_Shipping();
+            $item->set_method_title("$provider_name - $delivery_label Delivery");
+            $item->set_method_id('directpay_shipping');
+            $item->set_total($shipping_cost);
+            
+            // Add shipping meta data
+            if ($pickup_point) {
+                $item->add_meta_data('provider', $provider);
+                $item->add_meta_data('delivery_type', $delivery_type);
+                $item->add_meta_data('pickup_point_id', $pickup_point['id'] ?? '');
+                $item->add_meta_data('pickup_point_name', $pickup_point['name'] ?? '');
+                $item->add_meta_data('pickup_point_address', $pickup_point['address'] ?? '');
+                $item->add_meta_data('pickup_point_city', $pickup_point['city'] ?? '');
+                $item->add_meta_data('pickup_point_postal_code', $pickup_point['postalCode'] ?? '');
+            }
+            
+            $order->add_item($item);
+            $order->set_shipping_total($shipping_cost);
+            
+            // Add order note
+            if ($pickup_point) {
+                $order->add_order_note(
+                    sprintf(
+                        __('Shipping: %s - %s (€%s) - Pickup: %s, %s %s', 'directpay-go'),
+                        $provider_name,
+                        $delivery_label,
+                        number_format($shipping_cost, 2),
+                        $pickup_point['name'] ?? '',
+                        $pickup_point['postalCode'] ?? '',
+                        $pickup_point['city'] ?? ''
+                    )
+                );
+            }
+            
+        } catch (Exception $e) {
+            error_log('DirectPay Go: Failed to add shipping to order - ' . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Set shipping method for order (DEPRECATED - use add_shipping_to_order instead)
      */
     private function set_shipping_method($order, $shipping_method_id) {
         try {
@@ -278,5 +456,18 @@ class DirectPay_Go_Order {
         ]);
         
         return !empty($orders) ? $orders[0] : null;
+    }
+    
+    /**
+     * Initialize admin hooks
+     */
+    public static function init_admin_hooks() {
+        // Load admin classes
+        require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/admin/class-order-meta-boxes.php';
+        require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/admin/class-order-preview.php';
+        
+        // Initialize admin components
+        DirectPay_Go_Order_Meta_Boxes::init();
+        DirectPay_Go_Order_Preview::init();
     }
 }

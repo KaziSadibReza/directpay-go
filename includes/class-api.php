@@ -148,6 +148,11 @@ class DirectPay_Go_API {
                 'required' => false,
                 'type' => 'string',
             ],
+            'shipping_cost' => [
+                'required' => false,
+                'type' => 'number',
+                'default' => 0,
+            ],
             'payment_method' => [
                 'required' => true,
                 'type' => 'string',

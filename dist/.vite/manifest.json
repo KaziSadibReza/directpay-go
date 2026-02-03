@@ -1,11 +1,79 @@
 {
+  "_CustomDropdown-!~{006}~.js": {
+    "file": "css/CustomDropdown-CZWbSQ3P.css",
+    "src": "_CustomDropdown-!~{006}~.js"
+  },
+  "_CustomDropdown-0EZoAZdu.js": {
+    "file": "js/CustomDropdown-0EZoAZdu.js",
+    "name": "CustomDropdown",
+    "imports": [
+      "_client-C4Hiuctl.js"
+    ],
+    "css": [
+      "css/CustomDropdown-CZWbSQ3P.css"
+    ]
+  },
+  "_client-C4Hiuctl.js": {
+    "file": "js/client-C4Hiuctl.js",
+    "name": "client"
+  },
+  "_users-DEmqVik0.js": {
+    "file": "js/users-DEmqVik0.js",
+    "name": "users",
+    "imports": [
+      "_client-C4Hiuctl.js"
+    ]
+  },
+  "src/admin/admin.jsx": {
+    "file": "js/admin-D7ocXxzA.js",
+    "name": "admin",
+    "src": "src/admin/admin.jsx",
+    "isEntry": true,
+    "imports": [
+      "_client-C4Hiuctl.js",
+      "_CustomDropdown-0EZoAZdu.js"
+    ],
+    "css": [
+      "css/admin-BVbIxSDw.css"
+    ]
+  },
+  "src/admin/orders-admin.jsx": {
+    "file": "js/ordersAdmin-DPkx8We0.js",
+    "name": "ordersAdmin",
+    "src": "src/admin/orders-admin.jsx",
+    "isEntry": true,
+    "imports": [
+      "_client-C4Hiuctl.js",
+      "_users-DEmqVik0.js"
+    ],
+    "css": [
+      "css/ordersAdmin-DOXJefZJ.css"
+    ]
+  },
+  "src/admin/sessions-admin.jsx": {
+    "file": "js/sessionsAdmin-D9Dmv93L.js",
+    "name": "sessionsAdmin",
+    "src": "src/admin/sessions-admin.jsx",
+    "isEntry": true,
+    "imports": [
+      "_client-C4Hiuctl.js",
+      "_users-DEmqVik0.js"
+    ],
+    "css": [
+      "css/sessionsAdmin-C_33XA9f.css"
+    ]
+  },
   "src/main.jsx": {
-    "file": "js/main-B3Wge4TQ.js",
+    "file": "js/main-Ck4PH_PU.js",
     "name": "main",
     "src": "src/main.jsx",
     "isEntry": true,
+    "imports": [
+      "_client-C4Hiuctl.js",
+      "_CustomDropdown-0EZoAZdu.js"
+    ],
     "css": [
-      "css/main-MVsN-XHa.css"
+      "css/main-wKXnNvKQ.css"
     ]
   }
 }

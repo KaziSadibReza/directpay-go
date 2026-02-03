@@ -1,0 +1,69 @@
+/* DirectPay Go - Orders List Column */
+
+.directpay-order-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.directpay-order-badge svg {
+    flex-shrink: 0;
+}
+
+.directpay-order-badge.has-session {
+    background: #dcfce7;
+    border-color: #bbf7d0;
+    color: #16a34a;
+}
+
+.directpay-order-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.directpay-session-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 5px;
+    background: #dbeafe;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #1e40af;
+}
+
+.directpay-session-indicator.first-order {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.directpay-session-indicator svg {
+    flex-shrink: 0;
+}
+
+.directpay-reference {
+    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    font-size: 9px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+/* Subtle row highlighting */
+tr.directpay-session-order td {
+    border-left: 2px solid #fbbf24 !important;
+}
+
+tr.directpay-first-order td {
+    border-left: 2px solid #10b981 !important;
+}

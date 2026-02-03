@@ -1,0 +1,201 @@
+/* DirectPay Go - Admin Order Styles */
+
+.directpay-meta-box {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.directpay-field {
+    margin-bottom: 16px;
+}
+
+.directpay-field:last-child {
+    margin-bottom: 0;
+}
+
+.directpay-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+.directpay-value {
+    font-size: 14px;
+    color: #0f172a;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.reference-value {
+    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: #0f172a;
+}
+
+.directpay-code {
+    font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    font-size: 13px;
+}
+
+.directpay-shipping-header,
+.directpay-session-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.directpay-shipping-header svg,
+.directpay-session-header svg {
+    flex-shrink: 0;
+}
+
+.directpay-shipping-header > div,
+.directpay-session-header > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.delivery-badge,
+.session-status,
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 4px;
+}
+
+.delivery-badge {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.session-status.active,
+.status-badge.paid {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.session-status.expired,
+.status-badge.free {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.directpay-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.orders-count {
+    font-weight: 700;
+    font-size: 16px;
+    color: #0f172a;
+    margin-right: 6px;
+}
+
+.orders-label {
+    font-size: 13px;
+    color: #64748b;
+}
+
+.directpay-session-orders {
+    margin-top: 12px;
+}
+
+.directpay-session-orders label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.session-orders-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.session-order-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.session-order-item:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.session-order-item a {
+    font-weight: 600;
+    font-size: 14px;
+    color: #0f172a;
+    text-decoration: none;
+}
+
+.session-order-item a:hover {
+    color: #3b82f6;
+}
+
+.order-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.order-status.status-completed {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.order-status.status-processing {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.order-status.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.order-status.status-on-hold {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.order-status.status-cancelled,
+.order-status.status-refunded,
+.order-status.status-failed {
+    background: #fee2e2;
+    color: #991b1b;
+}

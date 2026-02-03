@@ -8,7 +8,8 @@ A high-performance WooCommerce custom checkout plugin built with React and optim
 ✅ **High Performance** - Optimized for 500+ concurrent users on shared hosting  
 ✅ **Custom Amounts** - Accept manual payment amounts with custom references  
 ✅ **Multi-Step Checkout** - Clean UX with progress indicator  
-✅ **Carrier Integration** - Supports Mondial Relay, Chronopost, and standard WooCommerce shipping  
+✅ **Shipping Carriers** - Mondial Relay & Chronopost pickup points with WooCommerce integration  
+✅ **WooCommerce Shipping** - Native shipping zone support with 3 shipping methods  
 ✅ **Payment Gateway Ready** - Works with Stripe, PayPal, and other WooCommerce payment gateways  
 ✅ **Multilingual** - Built-in translation support (French/English)  
 ✅ **Mobile-First** - Responsive SCSS with mobile-first approach  
@@ -29,7 +30,12 @@ A high-performance WooCommerce custom checkout plugin built with React and optim
 - WordPress 6.0+
 - WooCommerce 8.0+
 - PHP 8.0+
-- Node.js 18+ and npm
+- Node.js 18+ and pnpm
+
+**Install pnpm (if not already installed):**
+```bash
+npm install -g pnpm
+```
 
 ### 2. Install Plugin
 
@@ -40,11 +46,25 @@ A high-performance WooCommerce custom checkout plugin built with React and optim
 
 ```bash
 cd wp-content/plugins/directpay-go
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
-### 4. Create Checkout Page
+### 4. Configure Shipping (Optional)
+
+**For WooCommerce Shipping Integration:**
+1. Go to **DirectPay Go → Shipping Settings**
+2. Enable carriers and set credentials (test credentials pre-filled)
+3. Go to **WooCommerce → Settings → Shipping → Shipping Zones**
+4. Add DirectPay shipping methods to your zones
+5. See [WOOCOMMERCE_SHIPPING_SETUP.md](./WOOCOMMERCE_SHIPPING_SETUP.md) for details
+
+**Available Shipping Methods:**
+- DirectPay Flat Rate
+- Mondial Relay (pickup points with map)
+- Chronopost (pickup points with search)
+
+### 5. Create Checkout Page
 
 1. Create a new page in WordPress
 2. Add the shortcode: `[directpay_checkout]`
@@ -55,7 +75,7 @@ npm run build
 ### Development Mode (Hot Reload)
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 This starts Vite dev server on `http://localhost:3000` with hot module replacement.
@@ -63,7 +83,7 @@ This starts Vite dev server on `http://localhost:3000` with hot module replaceme
 ### Production Build
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 Generates optimized assets in the `dist/` folder with:
@@ -75,7 +95,7 @@ Generates optimized assets in the `dist/` folder with:
 ### Watch Mode
 
 ```bash
-npm run watch
+pnpm run watch
 ```
 
 Rebuilds on file changes (useful during development).
