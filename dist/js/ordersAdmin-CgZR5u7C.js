@@ -1,4 +1,4 @@
-import{r as e,j as s,a,R as r}from"./client-C4Hiuctl.js";import{c as i,P as d,U as n,S as l}from"./users-DEmqVik0.js";
+import{r as e,j as s,b as a,R as r}from"./client-B7OwZW8e.js";import{c as i,P as d,U as n,S as l}from"./users-BKu--nfZ.js";
 /**
  * @license lucide-react v0.563.0 - ISC
  *
