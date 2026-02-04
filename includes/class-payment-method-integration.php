@@ -249,7 +249,9 @@ class DirectPay_Payment_Method_Integration {
             $intent_data = apply_filters('wc_stripe_generate_payment_intent_args', [
                 'amount' => $amount_cents,
                 'currency' => $currency,
-                'payment_method_types' => ['card'],
+                'automatic_payment_methods' => [
+                    'enabled' => true,
+                ],
             ]);
             
             // Call Stripe API
