@@ -221,10 +221,16 @@ class DirectPay_Payment_Method_Integration {
         try {
             // Check if Stripe Gateway is active
             if (!class_exists('WC_Stripe_API')) {
+                error_log('DirectPay Error: WC_Stripe_API class not found');
                 return new WP_Error('no_stripe', 'WooCommerce Stripe Gateway not active', ['status' => 400]);
             }
             
             $amount = $request->get_param('amount');
+            
+            if (!$amount || $amount <= 0) {
+                error_log('DirectPay Error: Invalid amount - ' . $amount);
+                return new WP_Error('invalid_amount', 'Amount must be greater than 0', ['status' => 400]);
+            }
             
             // Convert amount to cents (Stripe expects smallest currency unit)
             $amount_cents = intval($amount * 100);
@@ -242,6 +248,7 @@ class DirectPay_Payment_Method_Integration {
                 : ($stripe_settings['publishable_key'] ?? '');
             
             if (empty($publishable_key)) {
+                error_log('DirectPay Error: Stripe publishable key not configured');
                 return new WP_Error('no_key', 'Stripe publishable key not configured', ['status' => 500]);
             }
             
@@ -252,15 +259,37 @@ class DirectPay_Payment_Method_Integration {
                 'automatic_payment_methods' => [
                     'enabled' => true,
                 ],
+                'capture_method' => 'automatic',
             ]);
+            
+            // Log the request data for debugging
+            error_log('DirectPay Creating Payment Intent: ' . json_encode($intent_data));
             
             // Call Stripe API
             $response = WC_Stripe_API::request($intent_data, 'payment_intents');
             
+            // Log the response for debugging
+            error_log('DirectPay Stripe Response: ' . json_encode($response));
+            
             if (!$response || !isset($response->client_secret)) {
                 $error_msg = isset($response->error) ? $response->error->message : 'Failed to create payment intent';
-                error_log('Stripe Payment Intent Error: ' . $error_msg);
-                return new WP_Error('payment_failed', $error_msg, ['status' => 500]);
+                $error_details = [
+                    'message' => $error_msg,
+                    'response' => $response,
+                ];
+                
+                error_log('DirectPay Payment Intent Error: ' . $error_msg);
+                if (isset($response->error)) {
+                    error_log('DirectPay Stripe Full Error: ' . json_encode($response->error));
+                    $error_details['stripe_code'] = $response->error->code ?? 'unknown';
+                    $error_details['stripe_type'] = $response->error->type ?? 'unknown';
+                }
+                
+                return new WP_Error(
+                    'payment_failed', 
+                    $error_msg, 
+                    ['status' => 500, 'details' => $error_details]
+                );
             }
             
             return new WP_REST_Response([
@@ -271,10 +300,16 @@ class DirectPay_Payment_Method_Integration {
             
         } catch (Exception $e) {
             error_log('DirectPay Stripe Intent Exception: ' . $e->getMessage());
+            error_log('DirectPay Exception Stack Trace: ' . $e->getTraceAsString());
             return new WP_Error(
                 'payment_intent_failed',
                 $e->getMessage(),
-                ['status' => 500]
+                [
+                    'status' => 500,
+                    'exception' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]
             );
         }
     }
