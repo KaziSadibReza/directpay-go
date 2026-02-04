@@ -253,13 +253,11 @@ class DirectPay_Payment_Method_Integration {
             }
             
             // Create Payment Intent via Stripe API
+            // Note: WC_Stripe_API converts boolean true to string "1", so we pass 'true' as string
             $intent_data = apply_filters('wc_stripe_generate_payment_intent_args', [
                 'amount' => $amount_cents,
                 'currency' => $currency,
-                'automatic_payment_methods' => [
-                    'enabled' => true,
-                ],
-                'capture_method' => 'automatic',
+                'payment_method_types' => ['card'],
             ]);
             
             // Log the request data for debugging
