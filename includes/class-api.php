@@ -121,6 +121,19 @@ class DirectPay_Go_API {
             'callback' => [$this, 'process_express_payment'],
             'permission_callback' => '__return_true',
         ]);
+        
+        // Get order status by ID
+        register_rest_route($namespace, '/orders/(?P<order_id>\d+)/status', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_order_status'],
+            'permission_callback' => '__return_true',
+            'args' => [
+                'order_id' => [
+                    'required' => true,
+                    'type' => 'integer',
+                ],
+            ],
+        ]);
     }
     
     /**
@@ -189,6 +202,9 @@ class DirectPay_Go_API {
                 return $order;
             }
             
+            // Calculate subtotal (custom amount before shipping)
+            $subtotal = $order->get_total() - $order->get_shipping_total();
+            
             // Return order details (NO payment_url - everything happens on custom page)
             return new WP_REST_Response([
                 'success' => true,
@@ -196,7 +212,7 @@ class DirectPay_Go_API {
                 'order_number' => $order->get_order_number(),
                 'order_key' => $order->get_order_key(),
                 'total' => $order->get_total(),
-                'subtotal' => $order->get_subtotal(),
+                'subtotal' => $subtotal,
                 'shipping_total' => $order->get_shipping_total(),
                 'currency' => $order->get_currency(),
                 'status' => $order->get_status(),
@@ -1071,6 +1087,35 @@ class DirectPay_Go_API {
                 'message' => $e->getMessage(),
             ], 500);
         }
+    }
+    
+    /**
+     * Get order status by ID
+     */
+    public function get_order_status($request) {
+        $order_id = $request->get_param('order_id');
+        
+        // Get the order
+        $order = wc_get_order($order_id);
+        
+        if (!$order) {
+            return new WP_Error(
+                'order_not_found',
+                'Order not found',
+                ['status' => 404]
+            );
+        }
+        
+        // Return order status and payment method
+        return new WP_REST_Response([
+            'success' => true,
+            'order_id' => $order->get_id(),
+            'order_number' => $order->get_order_number(),
+            'status' => $order->get_status(),
+            'payment_method_title' => $order->get_payment_method_title(),
+            'total' => $order->get_total(),
+            'currency' => $order->get_currency(),
+        ], 200);
     }
 }
 

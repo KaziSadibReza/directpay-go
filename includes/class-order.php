@@ -80,8 +80,24 @@ class DirectPay_Go_Order {
                 'country' => sanitize_text_field($customer['country'] ?? 'FR'),
             ], 'shipping');
             
-            // Set payment method first
+            // Set payment method and title
             $order->set_payment_method($payment_method);
+            
+            // Get payment gateway title
+            $payment_gateways = WC()->payment_gateways->payment_gateways();
+            if (isset($payment_gateways[$payment_method])) {
+                $order->set_payment_method_title($payment_gateways[$payment_method]->get_title());
+            } else {
+                // Fallback title if gateway not found
+                $payment_titles = [
+                    'stripe' => 'Credit Card (Stripe)',
+                    'cod' => 'Cash on Delivery',
+                    'bacs' => 'Bank Transfer',
+                    'cheque' => 'Check Payment',
+                ];
+                $title = $payment_titles[$payment_method] ?? ucfirst($payment_method);
+                $order->set_payment_method_title($title);
+            }
             
             // Add custom amount as a fee
             $this->add_custom_amount_to_order($order, $amount, $reference);

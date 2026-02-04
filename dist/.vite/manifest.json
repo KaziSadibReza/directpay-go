@@ -25,7 +25,7 @@
     ]
   },
   "src/admin/admin.jsx": {
-    "file": "js/admin-D7ocXxzA.js",
+    "file": "js/admin-C6g_XDQN.js",
     "name": "admin",
     "src": "src/admin/admin.jsx",
     "isEntry": true,
@@ -64,7 +64,7 @@
     ]
   },
   "src/main.jsx": {
-    "file": "js/main-Ck4PH_PU.js",
+    "file": "js/main-PRhTYcsg.js",
     "name": "main",
     "src": "src/main.jsx",
     "isEntry": true,
@@ -73,7 +73,7 @@
       "_CustomDropdown-0EZoAZdu.js"
     ],
     "css": [
-      "css/main-wKXnNvKQ.css"
+      "css/main-DtXuy7j7.css"
     ]
   }
 }

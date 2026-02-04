@@ -245,7 +245,16 @@ class DirectPay_Go {
         
         // Get WooCommerce countries
         $countries_obj = new WC_Countries();
-        $countries = $countries_obj->get_countries();
+        $all_countries = $countries_obj->get_countries();
+        
+        // Filter countries to only include those with pickup location pricing rules
+        $countries_with_pricing = $this->get_countries_with_pickup_rules();
+        $countries = array_intersect_key($all_countries, array_flip($countries_with_pricing));
+        
+        // If no countries have pricing rules, use all countries (backward compatibility)
+        if (empty($countries)) {
+            $countries = $all_countries;
+        }
         
         wp_localize_script('directpay-go-app', 'directPayConfig', [
             'apiUrl' => rest_url('directpay/v1'),
@@ -428,6 +437,32 @@ class DirectPay_Go {
                 echo '</p>';
             }
         }
+    }
+    
+    /**
+     * Get countries that have pickup location pricing rules
+     * 
+     * @return array Array of country codes that have pricing rules
+     */
+    private function get_countries_with_pickup_rules() {
+        $countries = [];
+        
+        // Get Chronopost pricing rules
+        $chronopost_pricing = get_option('directpay_chronopost_pricing', []);
+        if (!empty($chronopost_pricing)) {
+            $countries = array_merge($countries, array_keys($chronopost_pricing));
+        }
+        
+        // Get Mondial Relay pricing rules
+        $mondial_relay_pricing = get_option('directpay_mondial_relay_pricing', []);
+        if (!empty($mondial_relay_pricing)) {
+            $countries = array_merge($countries, array_keys($mondial_relay_pricing));
+        }
+        
+        // Remove duplicates
+        $countries = array_unique($countries);
+        
+        return $countries;
     }
 }
 
