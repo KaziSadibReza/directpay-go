@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: DirectPay Go
- * Plugin URI: https://yoursite.com/directpay-go
+ * Plugin URI: https://github.com/KaziSadibReza/directpay-go
  * Description: High-performance custom checkout for WooCommerce with React frontend. Optimized for 500+ concurrent visitors.
  * Version: 1.0.0
- * Author: Your Name
- * Author URI: https://yoursite.com
+ * Author: Kazi Sadib Reza
+ * Author URI: https://github.com/KaziSadibReza
  * Text Domain: directpay-go
  * Domain Path: /languages
  * Requires at least: 6.0
