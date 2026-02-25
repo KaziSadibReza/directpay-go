@@ -349,9 +349,10 @@ class DirectPay_Go_Order {
             if ($pickup_point) {
                 $order->add_order_note(
                     sprintf(
-                        __('Shipping: %s - %s (€%s) - Pickup: %s, %s %s', 'directpay-go'),
+                        __('Shipping: %s - %s (%s%s) - Pickup: %s, %s %s', 'directpay-go'),
                         $provider_name,
                         $delivery_label,
+                        get_woocommerce_currency_symbol(),
                         number_format($shipping_cost, 2),
                         $pickup_point['name'] ?? '',
                         $pickup_point['postalCode'] ?? '',
