@@ -233,7 +233,8 @@ class DirectPay_Payment_Method_Integration {
             }
             
             // Convert amount to cents (Stripe expects smallest currency unit)
-            $amount_cents = intval($amount * 100);
+            // Use round() instead of intval() to avoid floating-point truncation (e.g., 19.99 * 100 = 1998.99... → 1998)
+            $amount_cents = (int) round($amount * 100);
             
             // Get currency
             $currency = strtolower(get_woocommerce_currency());
