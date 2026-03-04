@@ -60,6 +60,13 @@ class DirectPay_Shipping_Handler {
             'callback' => [$this, 'get_checkout_locations'],
             'permission_callback' => '__return_true'
         ]);
+
+        // Get available shipping providers for a country (public)
+        register_rest_route('directpay/v1', '/shipping/checkout-providers', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_checkout_providers'],
+            'permission_callback' => '__return_true'
+        ]);
         
         // Add pricing rule (admin)
         register_rest_route('directpay/v1', '/shipping/pricing', [
@@ -74,6 +81,60 @@ class DirectPay_Shipping_Handler {
         register_rest_route('directpay/v1', '/shipping/pricing/(?P<country>[A-Z]{2})', [
             'methods' => 'DELETE',
             'callback' => [$this, 'delete_pricing_rule'],
+            'permission_callback' => function() {
+                return current_user_can('manage_woocommerce');
+            }
+        ]);
+        
+        // ── Mondial Relay API Integration ──
+        
+        // Save MR API settings
+        register_rest_route('directpay/v1', '/shipping/mondial-relay/settings', [
+            'methods' => 'POST',
+            'callback' => [$this, 'save_mr_settings'],
+            'permission_callback' => function() {
+                return current_user_can('manage_woocommerce');
+            }
+        ]);
+        
+        // Get MR API settings
+        register_rest_route('directpay/v1', '/shipping/mondial-relay/settings', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_mr_settings'],
+            'permission_callback' => function() {
+                return current_user_can('manage_woocommerce');
+            }
+        ]);
+        
+        // Test MR API connection
+        register_rest_route('directpay/v1', '/shipping/mondial-relay/test', [
+            'methods' => 'POST',
+            'callback' => [$this, 'test_mr_connection'],
+            'permission_callback' => function() {
+                return current_user_can('manage_woocommerce');
+            }
+        ]);
+        
+        // Search MR relay points
+        register_rest_route('directpay/v1', '/shipping/mondial-relay/search-points', [
+            'methods' => 'GET',
+            'callback' => [$this, 'search_mr_relay_points'],
+            'permission_callback' => '__return_true'
+        ]);
+        
+        // Create MR shipment (send order to Mondial Relay)
+        register_rest_route('directpay/v1', '/shipping/mondial-relay/create-shipment', [
+            'methods' => 'POST',
+            'callback' => [$this, 'create_mr_shipment'],
+            'permission_callback' => function() {
+                return current_user_can('manage_woocommerce');
+            }
+        ]);
+        
+        // Get MR shipping label
+        register_rest_route('directpay/v1', '/shipping/mondial-relay/label/(?P<expedition>[a-zA-Z0-9]+)', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_mr_label'],
             'permission_callback' => function() {
                 return current_user_can('manage_woocommerce');
             }
@@ -122,7 +183,7 @@ class DirectPay_Shipping_Handler {
         
         // Create new location
         $new_location = [
-            'id' => uniqid('loc_'),
+            'id' => 'loc_' . wp_generate_password(12, false),
             'name' => sanitize_text_field($location_data['name']),
             'address' => sanitize_text_field($location_data['address']),
             'city' => sanitize_text_field($location_data['city']),
@@ -287,6 +348,300 @@ class DirectPay_Shipping_Handler {
         
         return new WP_REST_Response([
             'message' => 'Pricing rule deleted successfully'
+        ], 200);
+    }
+
+    // ─────────────────────────────────────────────────
+    // Mondial Relay API Handler Methods
+    // ─────────────────────────────────────────────────
+
+    /**
+     * Get available shipping providers for a country (public)
+     * Returns which providers have pricing configured + their prices
+     */
+    public function get_checkout_providers($request) {
+        $country = sanitize_text_field($request->get_param('country') ?? '');
+
+        if (empty($country)) {
+            return new WP_REST_Response(['providers' => []], 200);
+        }
+
+        $chronopost_pricing = get_option('directpay_chronopost_pricing', []);
+        $mondial_relay_pricing = get_option('directpay_mondial_relay_pricing', []);
+
+        $providers = [];
+
+        // Check Chronopost
+        if (isset($chronopost_pricing[$country])) {
+            $cp = $chronopost_pricing[$country];
+            if (floatval($cp['express'] ?? 0) > 0 || floatval($cp['normal'] ?? 0) > 0) {
+                $providers['chronopost'] = [
+                    'available' => true,
+                    'express'   => floatval($cp['express'] ?? 0),
+                    'normal'    => floatval($cp['normal'] ?? 0),
+                ];
+            }
+        }
+
+        // Check Mondial Relay
+        if (isset($mondial_relay_pricing[$country])) {
+            $mr = $mondial_relay_pricing[$country];
+            if (floatval($mr['express'] ?? 0) > 0 || floatval($mr['normal'] ?? 0) > 0) {
+                // Also check if MR API is configured
+                $mr_settings = get_option('directpay_mondial_relay_api', []);
+                $mr_configured = !empty($mr_settings['enseigne']) && !empty($mr_settings['private_key']);
+
+                $providers['mondial_relay'] = [
+                    'available'    => true,
+                    'express'      => floatval($mr['express'] ?? 0),
+                    'normal'       => floatval($mr['normal'] ?? 0),
+                    'api_ready'    => $mr_configured,
+                ];
+            }
+        }
+
+        return new WP_REST_Response(['providers' => $providers], 200);
+    }
+
+    /**
+     * Save Mondial Relay API settings
+     */
+    public function save_mr_settings($request) {
+        $data = $request->get_json_params();
+
+        if (empty($data['enseigne']) || empty($data['private_key'])) {
+            return new WP_Error('missing_fields', __('Enseigne and Private Key are required', 'directpay-go'), ['status' => 400]);
+        }
+
+        $settings = [
+            'enseigne'    => sanitize_text_field($data['enseigne']),
+            'private_key' => sanitize_text_field($data['private_key']),
+            'brand_id'    => sanitize_text_field($data['brand_id'] ?? ''),
+        ];
+
+        update_option('directpay_mondial_relay_api', $settings);
+
+        return new WP_REST_Response([
+            'message'  => __('Mondial Relay API settings saved successfully', 'directpay-go'),
+            'settings' => [
+                'enseigne' => $settings['enseigne'],
+                'brand_id' => $settings['brand_id'],
+                'configured' => true,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Get Mondial Relay API settings
+     */
+    public function get_mr_settings($request) {
+        $settings = get_option('directpay_mondial_relay_api', []);
+
+        return new WP_REST_Response([
+            'enseigne'   => $settings['enseigne'] ?? '',
+            'private_key' => $settings['private_key'] ?? '',
+            'brand_id'   => $settings['brand_id'] ?? '',
+            'configured' => !empty($settings['enseigne']) && !empty($settings['private_key']),
+        ], 200);
+    }
+
+    /**
+     * Test Mondial Relay API connection
+     */
+    public function test_mr_connection($request) {
+        if (!class_exists('DirectPay_Mondial_Relay_API')) {
+            return new WP_Error('class_missing', __('Mondial Relay API class not loaded', 'directpay-go'), ['status' => 500]);
+        }
+
+        $result = DirectPay_Mondial_Relay_API::test_connection();
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return new WP_REST_Response($result, 200);
+    }
+
+    /**
+     * Search Mondial Relay pickup points
+     */
+    public function search_mr_relay_points($request) {
+        if (!class_exists('DirectPay_Mondial_Relay_API')) {
+            return new WP_Error('class_missing', __('Mondial Relay API class not loaded', 'directpay-go'), ['status' => 500]);
+        }
+
+        $country  = sanitize_text_field($request->get_param('country') ?? 'FR');
+        $postcode = sanitize_text_field($request->get_param('postcode') ?? '');
+
+        if (empty($postcode)) {
+            return new WP_Error('missing_postcode', __('Postal code is required', 'directpay-go'), ['status' => 400]);
+        }
+
+        $nb_results = intval($request->get_param('nb_results') ?? 20);
+        $result = DirectPay_Mondial_Relay_API::search_relay_points($country, $postcode, $nb_results);
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return new WP_REST_Response([
+            'points' => $result,
+            'count'  => count($result),
+        ], 200);
+    }
+
+    /**
+     * Create a Mondial Relay shipment from an order
+     */
+    public function create_mr_shipment($request) {
+        if (!class_exists('DirectPay_Mondial_Relay_API')) {
+            return new WP_Error('class_missing', __('Mondial Relay API class not loaded', 'directpay-go'), ['status' => 500]);
+        }
+
+        $data = $request->get_json_params();
+
+        // Support multiple order IDs (grouped customer shipment)
+        $order_ids = [];
+        if (!empty($data['order_ids']) && is_array($data['order_ids'])) {
+            $order_ids = array_map('intval', $data['order_ids']);
+        } elseif (!empty($data['order_id'])) {
+            $order_ids = [intval($data['order_id'])];
+        }
+
+        if (empty($order_ids)) {
+            return new WP_Error('missing_order', __('At least one Order ID is required', 'directpay-go'), ['status' => 400]);
+        }
+
+        // Load and validate all orders
+        $orders = [];
+        foreach ($order_ids as $oid) {
+            $order = wc_get_order($oid);
+            if (!$order) {
+                return new WP_Error('invalid_order', sprintf(__('Order #%d not found', 'directpay-go'), $oid), ['status' => 404]);
+            }
+            $existing = $order->get_meta('_mr_expedition_num');
+            if ($existing) {
+                return new WP_Error(
+                    'already_shipped',
+                    sprintf(__('Order #%d already has expedition number: %s', 'directpay-go'), $oid, $existing),
+                    ['status' => 400]
+                );
+            }
+            $orders[] = $order;
+        }
+
+        // Use the first order for customer address info
+        $primary_order = $orders[0];
+
+        // Get store address as sender
+        $store_address  = get_option('woocommerce_store_address', '');
+        $store_city     = get_option('woocommerce_store_city', '');
+        $store_postcode = get_option('woocommerce_store_postcode', '');
+        $store_country  = WC()->countries->get_base_country() ?: 'FR';
+        $store_name     = get_option('blogname', 'Store');
+
+        // Build reference from all order IDs
+        $order_ids_str = implode(',', $order_ids);
+        $reference = sanitize_text_field($data['reference'] ?? ('DP-' . $order_ids_str));
+
+        // Build shipment data
+        $shipment_data = [
+            // Sender (store)
+            'sender_name'       => $store_name,
+            'sender_address'    => $store_address,
+            'sender_city'       => $store_city,
+            'sender_postcode'   => $store_postcode,
+            'sender_country'    => $store_country,
+            'sender_phone'      => get_option('woocommerce_store_phone', ''),
+            'sender_email'      => get_option('admin_email', ''),
+
+            // Recipient (customer from primary order)
+            'recipient_name'    => $primary_order->get_shipping_first_name() . ' ' . $primary_order->get_shipping_last_name(),
+            'recipient_address' => $primary_order->get_shipping_address_1(),
+            'recipient_city'    => $primary_order->get_shipping_city(),
+            'recipient_postcode'=> $primary_order->get_shipping_postcode(),
+            'recipient_country' => $primary_order->get_shipping_country() ?: $primary_order->get_billing_country(),
+            'recipient_phone'   => $primary_order->get_billing_phone(),
+            'recipient_email'   => $primary_order->get_billing_email(),
+
+            'reference'         => $reference,
+            'product_name'      => sanitize_text_field($data['product_name'] ?? 'Commande #' . $order_ids_str),
+            'weight'            => intval($data['weight'] ?? 1000),
+            'delivery_mode'     => sanitize_text_field($data['delivery_mode'] ?? '24R'),
+            'nb_parcels'        => intval($data['nb_parcels'] ?? 1),
+            'relay_id'          => sanitize_text_field($data['relay_id'] ?? ''),
+        ];
+
+        // Fall back to billing address if shipping is empty
+        if (empty(trim($shipment_data['recipient_name']))) {
+            $shipment_data['recipient_name'] = $primary_order->get_billing_first_name() . ' ' . $primary_order->get_billing_last_name();
+        }
+        if (empty($shipment_data['recipient_address'])) {
+            $shipment_data['recipient_address'] = $primary_order->get_billing_address_1();
+        }
+        if (empty($shipment_data['recipient_city'])) {
+            $shipment_data['recipient_city'] = $primary_order->get_billing_city();
+        }
+        if (empty($shipment_data['recipient_postcode'])) {
+            $shipment_data['recipient_postcode'] = $primary_order->get_billing_postcode();
+        }
+
+        $result = DirectPay_Mondial_Relay_API::create_shipment($shipment_data);
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        // Save expedition number on ALL orders in this shipment
+        foreach ($orders as $order) {
+            $order->update_meta_data('_mr_expedition_num', $result['expedition_num']);
+            $order->update_meta_data('_mr_tracking_url', $result['tracking_url']);
+            $order->update_meta_data('_mr_shipment_date', current_time('mysql'));
+            $order->update_meta_data('_mr_shipment_weight', $shipment_data['weight']);
+            $order->update_meta_data('_mr_product_name', $shipment_data['product_name']);
+            $order->add_order_note(
+                sprintf(
+                    __('Mondial Relay shipment created (grouped with orders: %s). Expedition: %s | Weight: %dg | Product: %s', 'directpay-go'),
+                    $order_ids_str,
+                    $result['expedition_num'],
+                    $shipment_data['weight'],
+                    $shipment_data['product_name']
+                )
+            );
+            $order->save();
+        }
+
+        return new WP_REST_Response([
+            'message'        => __('Shipment created successfully', 'directpay-go'),
+            'expedition_num' => $result['expedition_num'],
+            'tracking_url'   => $result['tracking_url'],
+            'order_ids'      => $order_ids,
+        ], 201);
+    }
+
+    /**
+     * Get Mondial Relay shipping label
+     */
+    public function get_mr_label($request) {
+        if (!class_exists('DirectPay_Mondial_Relay_API')) {
+            return new WP_Error('class_missing', __('Mondial Relay API class not loaded', 'directpay-go'), ['status' => 500]);
+        }
+
+        $expedition = sanitize_text_field($request->get_param('expedition'));
+
+        if (empty($expedition)) {
+            return new WP_Error('missing_expedition', __('Expedition number is required', 'directpay-go'), ['status' => 400]);
+        }
+
+        $result = DirectPay_Mondial_Relay_API::get_label($expedition);
+
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return new WP_REST_Response([
+            'label_url'      => $result['label_url'],
+            'expedition_num' => $expedition,
         ], 200);
     }
 }

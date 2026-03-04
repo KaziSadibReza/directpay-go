@@ -69,6 +69,7 @@ class DirectPay_Go {
         require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-payment-method-integration.php';
         require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-api.php';
         require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-order.php';
+        require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-mondial-relay-api.php';
         require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-shipping-handler.php';
         require_once DIRECTPAY_GO_PLUGIN_DIR . 'includes/class-shipping-session.php';
         
@@ -258,6 +259,7 @@ class DirectPay_Go {
         
         wp_localize_script('directpay-go-app', 'directPayConfig', [
             'apiUrl' => rest_url('directpay/v1'),
+            'restUrl' => rest_url(),
             'nonce' => wp_create_nonce('wp_rest'),
             'storeApiUrl' => rest_url('wc/store/v1'),
             'locale' => get_locale(),
@@ -269,6 +271,7 @@ class DirectPay_Go {
             'currencyDecimals' => wc_get_price_decimals(),
             'countries' => $countries,
             'defaultCountry' => $countries_obj->get_base_country(),
+            'sessionHours' => absint(get_option('directpay_shipping_session_hours', 5)),
             'translations' => $this->get_translations(),
         ]);
     }
@@ -312,7 +315,8 @@ class DirectPay_Go {
      * Custom page template
      */
     public function custom_page_template($template) {
-        if (is_page() && has_shortcode(get_post()->post_content ?? '', 'directpay_checkout')) {
+        $post = get_post();
+        if (is_page() && $post && has_shortcode($post->post_content ?? '', 'directpay_checkout')) {
             $custom_template = DIRECTPAY_GO_PLUGIN_DIR . 'templates/checkout-page.php';
             if (file_exists($custom_template)) {
                 return $custom_template;
@@ -377,20 +381,32 @@ class DirectPay_Go {
      * Save pickup location on order
      */
     public function save_shipping_pickup_location($order_id) {
+        // Verify nonce
+        if (!isset($_POST['directpay_shipping_nonce']) || !wp_verify_nonce($_POST['directpay_shipping_nonce'], 'directpay_save_shipping')) {
+            return;
+        }
+        
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return;
+        }
+        
         if (isset($_POST['directpay_pickup_location'])) {
             $location_data = json_decode(stripslashes($_POST['directpay_pickup_location']), true);
             if ($location_data) {
-                update_post_meta($order_id, '_directpay_pickup_location', $location_data);
+                $order->update_meta_data('_directpay_pickup_location', $location_data);
             }
         }
         
         if (isset($_POST['directpay_delivery_type'])) {
-            update_post_meta($order_id, '_directpay_delivery_type', sanitize_text_field($_POST['directpay_delivery_type']));
+            $order->update_meta_data('_directpay_delivery_type', sanitize_text_field($_POST['directpay_delivery_type']));
         }
         
         if (isset($_POST['directpay_shipping_method'])) {
-            update_post_meta($order_id, '_directpay_shipping_method', sanitize_text_field($_POST['directpay_shipping_method']));
+            $order->update_meta_data('_directpay_shipping_method', sanitize_text_field($_POST['directpay_shipping_method']));
         }
+        
+        $order->save();
     }
     
     

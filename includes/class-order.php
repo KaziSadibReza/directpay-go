@@ -23,6 +23,12 @@ class DirectPay_Go_Order {
             $reference = sanitize_text_field($data['reference']);
             $amount = floatval($data['amount']);
             $customer = $data['customer'];
+            if (!is_array($customer) || empty($customer['email'])) {
+                return new WP_Error(
+                    'invalid_customer',
+                    __('Customer data is invalid or email is missing', 'directpay-go')
+                );
+            }
             $shipping_method = $data['shipping_method'] ?? null;
             $payment_method = sanitize_text_field($data['payment_method']);
             $locale = $data['locale'] ?? get_locale();
@@ -165,7 +171,7 @@ class DirectPay_Go_Order {
                     
                     // Update transient
                     $remaining_time = $session_data['start_time'] + (get_option('directpay_shipping_session_hours', 5) * HOUR_IN_SECONDS) - time();
-                    set_transient('directpay_session_' . $session_id, $session_data, $remaining_time);
+                    set_transient('directpay_session_' . $session_id, $session_data, max(1, $remaining_time));
                     
                     $order->add_order_note(
                         sprintf(
@@ -186,8 +192,7 @@ class DirectPay_Go_Order {
             $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
             
             if ($payment_method === 'stripe' && $payment_intent_id) {
-                // Stripe payment confirmed
-                $order->set_status('processing', __('Payment confirmed via Stripe', 'directpay-go'));
+                // Stripe payment confirmed - payment_complete() sets status to processing
                 $order->payment_complete($payment_intent_id);
             } elseif (isset($available_gateways[$payment_method]) && $available_gateways[$payment_method]->id === 'cod') {
                 // COD
@@ -233,17 +238,21 @@ class DirectPay_Go_Order {
                     $duration = absint(get_option('directpay_shipping_session_hours', 5)) * HOUR_IN_SECONDS;
                     set_transient('directpay_session_' . $new_session_id, $session_data, $duration);
                     
-                    // Set cookie
+                    // Set cookie — use headers_sent() guard for REST compatibility
                     $expire = time() + $duration;
-                    setcookie(
-                        'directpay_shipping_session',
-                        $new_session_id,
-                        $expire,
-                        COOKIEPATH ? COOKIEPATH : '/',
-                        COOKIE_DOMAIN,
-                        is_ssl(),
-                        true // httponly
-                    );
+                    if (!headers_sent()) {
+                        setcookie(
+                            'directpay_shipping_session',
+                            $new_session_id,
+                            $expire,
+                            COOKIEPATH ? COOKIEPATH : '/',
+                            COOKIE_DOMAIN,
+                            is_ssl(),
+                            true // httponly
+                        );
+                    }
+                    // Also store in $_COOKIE for immediate access within this request
+                    $_COOKIE['directpay_shipping_session'] = $new_session_id;
                     
                     // Update order meta
                     $order->update_meta_data('_directpay_session_id', $new_session_id);

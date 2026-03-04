@@ -83,6 +83,16 @@ class DirectPay_Admin_Menu {
      * Render orders page
      */
     public function render_orders_page() {
+        // Check if Mondial Relay API is configured
+        $mr_configured = class_exists('DirectPay_Mondial_Relay_API') && DirectPay_Mondial_Relay_API::is_configured();
+        
+        // Get store info for sender defaults
+        $store_name     = get_option('blogname', '');
+        $store_address  = get_option('woocommerce_store_address', '');
+        $store_city     = get_option('woocommerce_store_city', '');
+        $store_postcode = get_option('woocommerce_store_postcode', '');
+        $store_country  = WC()->countries->get_base_country() ?: 'FR';
+        
         ?>
         <div class="wrap">
             <script>
@@ -91,7 +101,15 @@ class DirectPay_Admin_Menu {
                     'ajaxUrl' => admin_url('admin-ajax.php'),
                     'nonce' => wp_create_nonce('directpay_admin_nonce'),
                     'restUrl' => rest_url(),
-                    'restNonce' => wp_create_nonce('wp_rest')
+                    'restNonce' => wp_create_nonce('wp_rest'),
+                    'mrConfigured' => $mr_configured,
+                    'storeInfo' => [
+                        'name' => $store_name,
+                        'address' => $store_address,
+                        'city' => $store_city,
+                        'postcode' => $store_postcode,
+                        'country' => $store_country,
+                    ],
                 ]); ?>;
             </script>
             <div id="directpay-orders-root"></div>

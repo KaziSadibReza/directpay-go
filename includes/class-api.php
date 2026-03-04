@@ -206,7 +206,7 @@ class DirectPay_Go_API {
             $subtotal = $order->get_total() - $order->get_shipping_total();
             
             // Return order details (NO payment_url - everything happens on custom page)
-            return new WP_REST_Response([
+            $response_data = [
                 'success' => true,
                 'order_id' => $order->get_id(),
                 'order_number' => $order->get_order_number(),
@@ -218,7 +218,15 @@ class DirectPay_Go_API {
                 'status' => $order->get_status(),
                 'payment_method' => $order->get_payment_method(),
                 'payment_method_title' => $order->get_payment_method_title(),
-            ], 201);
+            ];
+            
+            // Include session_id for client-side cookie setting (REST responses may not send Set-Cookie)
+            $session_id = $order->get_meta('_directpay_session_id');
+            if ($session_id) {
+                $response_data['session_id'] = $session_id;
+            }
+            
+            return new WP_REST_Response($response_data, 201);
             
         } catch (Exception $e) {
             return new WP_Error(
@@ -1007,26 +1015,26 @@ class DirectPay_Go_API {
             ]);
             
             // Set billing address
-            $order->set_billing_first_name($params['first_name'] ?? '');
-            $order->set_billing_last_name($params['last_name'] ?? '');
-            $order->set_billing_address_1($params['billing_address_1'] ?? '');
-            $order->set_billing_address_2($params['billing_address_2'] ?? '');
-            $order->set_billing_city($params['billing_city'] ?? '');
-            $order->set_billing_state($params['billing_state'] ?? '');
-            $order->set_billing_postcode($params['billing_postcode'] ?? '');
-            $order->set_billing_country($params['billing_country'] ?? '');
-            $order->set_billing_email($params['email'] ?? '');
-            $order->set_billing_phone($params['phone'] ?? '');
+            $order->set_billing_first_name(sanitize_text_field($params['first_name'] ?? ''));
+            $order->set_billing_last_name(sanitize_text_field($params['last_name'] ?? ''));
+            $order->set_billing_address_1(sanitize_text_field($params['billing_address_1'] ?? ''));
+            $order->set_billing_address_2(sanitize_text_field($params['billing_address_2'] ?? ''));
+            $order->set_billing_city(sanitize_text_field($params['billing_city'] ?? ''));
+            $order->set_billing_state(sanitize_text_field($params['billing_state'] ?? ''));
+            $order->set_billing_postcode(sanitize_text_field($params['billing_postcode'] ?? ''));
+            $order->set_billing_country(sanitize_text_field($params['billing_country'] ?? ''));
+            $order->set_billing_email(sanitize_email($params['email'] ?? ''));
+            $order->set_billing_phone(sanitize_text_field($params['phone'] ?? ''));
             
             // Set shipping address
-            $order->set_shipping_first_name($params['shipping_first_name'] ?? $params['first_name'] ?? '');
-            $order->set_shipping_last_name($params['shipping_last_name'] ?? $params['last_name'] ?? '');
-            $order->set_shipping_address_1($params['shipping_address_1'] ?? '');
-            $order->set_shipping_address_2($params['shipping_address_2'] ?? '');
-            $order->set_shipping_city($params['shipping_city'] ?? '');
-            $order->set_shipping_state($params['shipping_state'] ?? '');
-            $order->set_shipping_postcode($params['shipping_postcode'] ?? '');
-            $order->set_shipping_country($params['shipping_country'] ?? '');
+            $order->set_shipping_first_name(sanitize_text_field($params['shipping_first_name'] ?? $params['first_name'] ?? ''));
+            $order->set_shipping_last_name(sanitize_text_field($params['shipping_last_name'] ?? $params['last_name'] ?? ''));
+            $order->set_shipping_address_1(sanitize_text_field($params['shipping_address_1'] ?? ''));
+            $order->set_shipping_address_2(sanitize_text_field($params['shipping_address_2'] ?? ''));
+            $order->set_shipping_city(sanitize_text_field($params['shipping_city'] ?? ''));
+            $order->set_shipping_state(sanitize_text_field($params['shipping_state'] ?? ''));
+            $order->set_shipping_postcode(sanitize_text_field($params['shipping_postcode'] ?? ''));
+            $order->set_shipping_country(sanitize_text_field($params['shipping_country'] ?? ''));
             
             // Add shipping if selected
             if ($shipping_cost > 0 && isset($params['shipping_method'])) {
@@ -1040,10 +1048,17 @@ class DirectPay_Go_API {
             // Set order reference as custom meta (visible in admin)
             $order->add_meta_data('DirectPay Reference', $reference, true);
             $order->add_meta_data('_directpay_reference', $reference, true); // Also save with underscore for programmatic access
+            $order->add_meta_data('_directpay_order', 'yes', true); // Mark as DirectPay order
             
             // Set payment method
-            $order->set_payment_method('stripe');
-            $order->set_payment_method_title('Stripe (Express Checkout)');
+            $payment_method = sanitize_text_field($params['payment_method'] ?? 'stripe');
+            $order->set_payment_method($payment_method);
+            $payment_gateways = WC()->payment_gateways->payment_gateways();
+            if (isset($payment_gateways[$payment_method])) {
+                $order->set_payment_method_title($payment_gateways[$payment_method]->get_title());
+            } else {
+                $order->set_payment_method_title('Stripe (Express Checkout)');
+            }
             
             // Set transaction ID to the Stripe payment intent ID
             if (!empty($payment_intent_id)) {
@@ -1056,9 +1071,8 @@ class DirectPay_Go_API {
             $order->calculate_totals();
             
             // Payment was already confirmed by Stripe on the client side
-            // Mark order as processing (payment completed)
-            $order->set_status('processing', __('Payment completed via Stripe Express Checkout.', 'directpay-go'));
-            $order->payment_complete();
+            // payment_complete() sets status to processing automatically
+            $order->payment_complete($payment_intent_id);
             
             // Add order note
             $order->add_order_note(sprintf(
@@ -1106,15 +1120,20 @@ class DirectPay_Go_API {
             );
         }
         
-        // Return order status and payment method
+        // Security: Only allow access to DirectPay orders
+        if ($order->get_meta('_directpay_order') !== 'yes') {
+            return new WP_Error(
+                'order_not_found',
+                'Order not found',
+                ['status' => 404]
+            );
+        }
+        
+        // Return order status and payment method (limited info)
         return new WP_REST_Response([
             'success' => true,
             'order_id' => $order->get_id(),
-            'order_number' => $order->get_order_number(),
             'status' => $order->get_status(),
-            'payment_method_title' => $order->get_payment_method_title(),
-            'total' => $order->get_total(),
-            'currency' => $order->get_currency(),
         ], 200);
     }
 }

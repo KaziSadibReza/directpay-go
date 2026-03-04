@@ -397,7 +397,12 @@ class DirectPay_Shipping_Session {
     /**
      * REST API: Clear session manually
      */
-    public static function clear_session() {
+    public static function clear_session($request) {
+        // Verify nonce from X-WP-Nonce header (standard WP REST API nonce check)
+        if (!wp_verify_nonce($request->get_header('X-WP-Nonce'), 'wp_rest')) {
+            return new WP_Error('rest_forbidden', __('Nonce verification failed.', 'directpay-go'), ['status' => 403]);
+        }
+        
         $session = self::get_active_session();
         
         if ($session) {
@@ -655,12 +660,58 @@ class DirectPay_Shipping_Session {
                 $session_active = $session_data !== false;
             }
             
+            // Get line items (products and fees) from order
+            $line_items = [];
+            foreach ($order->get_items() as $item) {
+                $product = $item->get_product();
+                $line_items[] = [
+                    'name'       => $item->get_name(),
+                    'quantity'   => $item->get_quantity(),
+                    'total'      => html_entity_decode(strip_tags(wc_price($item->get_total())), ENT_QUOTES, 'UTF-8'),
+                    'total_raw'  => (float) $item->get_total(),
+                    'sku'        => $product ? $product->get_sku() : '',
+                    'weight'     => $product ? (float) $product->get_weight() : 0,
+                ];
+            }
+            // Also include fee items (DirectPay Go uses fees instead of products)
+            foreach ($order->get_items('fee') as $fee_item) {
+                $line_items[] = [
+                    'name'       => $fee_item->get_name(),
+                    'quantity'   => 1,
+                    'total'      => html_entity_decode(strip_tags(wc_price($fee_item->get_total())), ENT_QUOTES, 'UTF-8'),
+                    'total_raw'  => (float) $fee_item->get_total(),
+                    'sku'        => '',
+                    'weight'     => 0,
+                ];
+            }
+
+            // Get order reference from meta
+            $order_reference = $order->get_meta('_custom_reference')
+                ?: $order->get_meta('_directpay_reference')
+                ?: '';
+
             $order_data = [
                 'order_id' => $order->get_id(),
                 'date' => $order->get_date_created()->date('Y-m-d H:i:s'),
                 'total' => html_entity_decode(strip_tags($order->get_formatted_order_total()), ENT_QUOTES, 'UTF-8'),
+                'total_raw' => (float) $order->get_total(),
                 'status' => ucfirst($order->get_status()),
                 'paid_shipping' => $paid_shipping,
+                'reference' => $order_reference,
+                'line_items' => $line_items,
+                // Mondial Relay shipment info
+                'mr_expedition_num' => $order->get_meta('_mr_expedition_num') ?: null,
+                'mr_tracking_url'   => $order->get_meta('_mr_tracking_url') ?: null,
+                'mr_shipment_date'  => $order->get_meta('_mr_shipment_date') ?: null,
+                // Customer address info for MR popup
+                'shipping_first_name' => $order->get_shipping_first_name() ?: $order->get_billing_first_name(),
+                'shipping_last_name'  => $order->get_shipping_last_name() ?: $order->get_billing_last_name(),
+                'shipping_address'    => $order->get_shipping_address_1() ?: $order->get_billing_address_1(),
+                'shipping_city'       => $order->get_shipping_city() ?: $order->get_billing_city(),
+                'shipping_postcode'   => $order->get_shipping_postcode() ?: $order->get_billing_postcode(),
+                'shipping_country'    => $order->get_shipping_country() ?: $order->get_billing_country(),
+                'billing_phone'       => $order->get_billing_phone(),
+                'billing_email'       => $order->get_billing_email(),
             ];
             
             if ($session_id) {

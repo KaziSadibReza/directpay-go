@@ -17,15 +17,15 @@
     "file": "js/client-B7OwZW8e.js",
     "name": "client"
   },
-  "_users-BKu--nfZ.js": {
-    "file": "js/users-BKu--nfZ.js",
+  "_users-DYG8JJfV.js": {
+    "file": "js/users-DYG8JJfV.js",
     "name": "users",
     "imports": [
       "_client-B7OwZW8e.js"
     ]
   },
   "src/admin/admin.jsx": {
-    "file": "js/admin-B36ESqfp.js",
+    "file": "js/admin-_lZoXC2u.js",
     "name": "admin",
     "src": "src/admin/admin.jsx",
     "isEntry": true,
@@ -34,37 +34,37 @@
       "_CustomDropdown-JODbO0vG.js"
     ],
     "css": [
-      "css/admin-BVbIxSDw.css"
+      "css/admin-7mbcHaNS.css"
     ]
   },
   "src/admin/orders-admin.jsx": {
-    "file": "js/ordersAdmin-CgZR5u7C.js",
+    "file": "js/ordersAdmin-BP8xzjes.js",
     "name": "ordersAdmin",
     "src": "src/admin/orders-admin.jsx",
     "isEntry": true,
     "imports": [
       "_client-B7OwZW8e.js",
-      "_users-BKu--nfZ.js"
+      "_users-DYG8JJfV.js"
     ],
     "css": [
-      "css/ordersAdmin-DOXJefZJ.css"
+      "css/ordersAdmin-DXU_xctm.css"
     ]
   },
   "src/admin/sessions-admin.jsx": {
-    "file": "js/sessionsAdmin-Cg6hahq1.js",
+    "file": "js/sessionsAdmin-CL8Hjytn.js",
     "name": "sessionsAdmin",
     "src": "src/admin/sessions-admin.jsx",
     "isEntry": true,
     "imports": [
       "_client-B7OwZW8e.js",
-      "_users-BKu--nfZ.js"
+      "_users-DYG8JJfV.js"
     ],
     "css": [
       "css/sessionsAdmin-C_33XA9f.css"
     ]
   },
   "src/main.jsx": {
-    "file": "js/main-CeBYBaQN.js",
+    "file": "js/main-BbLuN-TY.js",
     "name": "main",
     "src": "src/main.jsx",
     "isEntry": true,
@@ -73,7 +73,7 @@
       "_CustomDropdown-JODbO0vG.js"
     ],
     "css": [
-      "css/main-Dzj9BwTr.css"
+      "css/main-Oq1hGVUw.css"
     ]
   }
 }
