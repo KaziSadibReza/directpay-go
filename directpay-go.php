@@ -260,6 +260,8 @@ class DirectPay_Go {
         wp_localize_script('directpay-go-app', 'directPayConfig', [
             'apiUrl' => rest_url('directpay/v1'),
             'restUrl' => rest_url(),
+            'siteUrl' => home_url('/'),
+            'pluginUrl' => DIRECTPAY_GO_PLUGIN_URL,
             'nonce' => wp_create_nonce('wp_rest'),
             'storeApiUrl' => rest_url('wc/store/v1'),
             'locale' => get_locale(),
