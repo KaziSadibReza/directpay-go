@@ -546,9 +546,9 @@ class DirectPay_Shipping_Handler {
         $store_country  = WC()->countries->get_base_country() ?: 'FR';
         $store_name     = get_option('blogname', 'Store');
 
-        // Build reference from all order IDs
-        $order_ids_str = implode(',', $order_ids);
-        $reference = sanitize_text_field($data['reference'] ?? ('DP-' . $order_ids_str));
+        // Build reference from all order IDs (use dash separator — commas break MR hash)
+        $order_ids_str = implode('-', $order_ids);
+        $reference = preg_replace('/[^a-zA-Z0-9\-]/', '', sanitize_text_field($data['reference'] ?? ('DP-' . $order_ids_str)));
 
         // Build shipment data
         $shipment_data = [
@@ -571,7 +571,7 @@ class DirectPay_Shipping_Handler {
             'recipient_email'   => $primary_order->get_billing_email(),
 
             'reference'         => $reference,
-            'product_name'      => sanitize_text_field($data['product_name'] ?? 'Commande #' . $order_ids_str),
+            'product_name'      => sanitize_text_field($data['product_name'] ?? 'Commande ' . $order_ids_str),
             'weight'            => intval($data['weight'] ?? 1000),
             'delivery_mode'     => sanitize_text_field($data['delivery_mode'] ?? '24R'),
             'nb_parcels'        => intval($data['nb_parcels'] ?? 1),
