@@ -417,6 +417,7 @@ class DirectPay_Shipping_Handler {
             'enseigne'      => sanitize_text_field($data['enseigne']),
             'private_key'   => sanitize_text_field($data['private_key']),
             'brand_id'      => sanitize_text_field($data['brand_id'] ?? ''),
+            'col_mode'      => sanitize_text_field($data['col_mode'] ?? 'CCC'),
             'sender_phone'  => sanitize_text_field($data['sender_phone'] ?? ''),
             'sender_email'  => sanitize_email($data['sender_email'] ?? ''),
         ];
@@ -443,6 +444,7 @@ class DirectPay_Shipping_Handler {
             'enseigne'     => $settings['enseigne'] ?? '',
             'private_key'  => $settings['private_key'] ?? '',
             'brand_id'     => $settings['brand_id'] ?? '',
+            'col_mode'     => $settings['col_mode'] ?? 'CCC',
             'sender_phone' => $settings['sender_phone'] ?? '',
             'sender_email' => $settings['sender_email'] ?? '',
             'configured'   => !empty($settings['enseigne']) && !empty($settings['private_key']),

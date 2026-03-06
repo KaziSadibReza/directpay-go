@@ -37,6 +37,7 @@ class DirectPay_Mondial_Relay_API {
             'enseigne'    => $settings['enseigne'],
             'private_key' => $settings['private_key'],
             'brand_id'    => $settings['brand_id'] ?? '',
+            'col_mode'    => $settings['col_mode'] ?? 'CCC',
         ];
     }
 
@@ -238,7 +239,7 @@ class DirectPay_Mondial_Relay_API {
             // Build parameters — ALL fields in MR's expected order for WSI2_CreationEtiquette
             $params = [
                 'Enseigne'       => $creds['enseigne'],
-                'ModeCol'        => '', // Use account default collection mode
+                'ModeCol'        => $creds['col_mode'],
                 'ModeLiv'        => $mode_livraison,
                 'NDossier'       => substr($shipment_data['reference'] ?? '', 0, 15),
                 'NClient'        => substr($shipment_data['reference'] ?? '', 0, 9),
