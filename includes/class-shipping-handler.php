@@ -593,6 +593,27 @@ class DirectPay_Shipping_Handler {
         $result = DirectPay_Mondial_Relay_API::create_shipment($shipment_data);
 
         if (is_wp_error($result)) {
+            // Include shipment data summary in error for debugging
+            $debug_info = [
+                'sender_name'       => $shipment_data['sender_name'],
+                'sender_address'    => $shipment_data['sender_address'],
+                'sender_city'       => $shipment_data['sender_city'],
+                'sender_postcode'   => $shipment_data['sender_postcode'],
+                'sender_country'    => $shipment_data['sender_country'],
+                'sender_phone'      => $shipment_data['sender_phone'],
+                'sender_email'      => $shipment_data['sender_email'],
+                'recipient_name'    => $shipment_data['recipient_name'],
+                'recipient_address' => $shipment_data['recipient_address'],
+                'recipient_city'    => $shipment_data['recipient_city'],
+                'recipient_postcode'=> $shipment_data['recipient_postcode'],
+                'recipient_country' => $shipment_data['recipient_country'],
+                'recipient_phone'   => $shipment_data['recipient_phone'],
+                'delivery_mode'     => $shipment_data['delivery_mode'],
+                'relay_id'          => $shipment_data['relay_id'],
+                'weight'            => $shipment_data['weight'],
+            ];
+            error_log('MR Shipment Data that failed: ' . json_encode($debug_info));
+            $result->add_data(array_merge($result->get_error_data() ?: [], ['shipment_debug' => $debug_info]));
             return $result;
         }
 

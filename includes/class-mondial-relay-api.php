@@ -290,11 +290,11 @@ class DirectPay_Mondial_Relay_API {
                 $stat_code = trim($result->STAT);
                 $stat_desc = self::get_error_description($stat_code);
                 error_log('Mondial Relay CreateExpedition Error - STAT: ' . $stat_code . ' — ' . $stat_desc);
-                error_log('Mondial Relay CreateExpedition Full Result: ' . json_encode($result));
+                error_log('Mondial Relay CreateExpedition Params Sent: ' . json_encode(array_diff_key($params, ['Security' => 1])));
                 return new WP_Error(
                     'mr_shipment_failed',
                     sprintf(__('Mondial Relay shipment creation failed. Error code: %s — %s', 'directpay-go'), $stat_code, $stat_desc),
-                    ['status' => 400, 'stat' => $stat_code]
+                    ['status' => 400, 'stat' => $stat_code, 'params_sent' => array_diff_key($params, ['Security' => 1])]
                 );
             }
 
