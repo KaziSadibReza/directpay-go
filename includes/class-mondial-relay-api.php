@@ -238,7 +238,7 @@ class DirectPay_Mondial_Relay_API {
             // Build parameters — ALL fields in MR's expected order for WSI2_CreationEtiquette
             $params = [
                 'Enseigne'       => $creds['enseigne'],
-                'ModeCol'        => 'CCC', // Drop-off at MR counter/agency
+                'ModeCol'        => '', // Use account default collection mode
                 'ModeLiv'        => $mode_livraison,
                 'NDossier'       => substr($shipment_data['reference'] ?? '', 0, 15),
                 'NClient'        => substr($shipment_data['reference'] ?? '', 0, 9),
