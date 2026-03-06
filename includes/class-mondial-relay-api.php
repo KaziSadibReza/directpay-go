@@ -235,7 +235,7 @@ class DirectPay_Mondial_Relay_API {
                 );
             }
 
-            // Build parameters
+            // Build parameters — ALL fields in MR's expected order for WSI2_CreationExpedition
             $params = [
                 'Enseigne'       => $creds['enseigne'],
                 'ModeCol'        => 'CCC', // Drop-off at relay by sender
@@ -244,21 +244,29 @@ class DirectPay_Mondial_Relay_API {
                 'NClient'        => substr($shipment_data['reference'] ?? '', 0, 9),
                 'Expe_Langage'   => 'FR',
                 'Expe_Ad1'       => self::sanitize_mr($shipment_data['sender_name'] ?? '', 32),
+                'Expe_Ad2'       => '',
                 'Expe_Ad3'       => self::sanitize_mr($shipment_data['sender_address'] ?? '', 32),
+                'Expe_Ad4'       => '',
                 'Expe_Ville'     => self::sanitize_mr($shipment_data['sender_city'] ?? '', 26),
                 'Expe_CP'        => substr($shipment_data['sender_postcode'] ?? '', 0, 10),
                 'Expe_Pays'      => strtoupper($shipment_data['sender_country'] ?? 'FR'),
                 'Expe_Tel1'      => self::sanitize_phone($shipment_data['sender_phone'] ?? ''),
+                'Expe_Tel2'      => '',
                 'Expe_Mail'      => substr($shipment_data['sender_email'] ?? '', 0, 70),
                 'Dest_Langage'   => 'FR',
-                'Dest_Ad1'       => self::sanitize_mr($shipment_data['recipient_name'] ?? '', 32),
+                'Dest_Ad1'       => self::sanitize_mr(self::clean_name($shipment_data['recipient_name'] ?? ''), 32),
+                'Dest_Ad2'       => '',
                 'Dest_Ad3'       => self::sanitize_mr($shipment_data['recipient_address'] ?? '', 32),
+                'Dest_Ad4'       => '',
                 'Dest_Ville'     => self::sanitize_mr($shipment_data['recipient_city'] ?? '', 26),
                 'Dest_CP'        => substr($shipment_data['recipient_postcode'] ?? '', 0, 10),
                 'Dest_Pays'      => strtoupper($shipment_data['recipient_country'] ?? 'FR'),
                 'Dest_Tel1'      => self::sanitize_phone($shipment_data['recipient_phone'] ?? ''),
+                'Dest_Tel2'      => '',
                 'Dest_Mail'      => substr($shipment_data['recipient_email'] ?? '', 0, 70),
                 'Poids'          => (string) $weight,
+                'Longueur'       => '',
+                'Taille'         => '',
                 'NbColis'        => (string) $nb_colis,
                 'CRT_Valeur'     => '0',
                 'CRT_Devise'     => '',
@@ -268,6 +276,12 @@ class DirectPay_Mondial_Relay_API {
                 'COL_Rel'        => '',
                 'LIV_Rel_Pays'   => '',
                 'LIV_Rel'        => '',
+                'TAvisage'       => '',
+                'TReprise'       => '',
+                'Montage'        => '',
+                'TRDV'           => '',
+                'Assession'      => '',
+                'Instructions'   => '',
                 'Texte'          => self::sanitize_mr($shipment_data['product_name'] ?? '', 30),
             ];
 
@@ -430,6 +444,21 @@ class DirectPay_Mondial_Relay_API {
         $str = preg_replace('/[^a-zA-Z0-9\s\-\/\.]/', '', $str);
         // Trim and limit length
         return substr(trim($str), 0, $max_length);
+    }
+
+    /**
+     * Clean a name field by removing email-like content
+     * Handles cases where email is concatenated into name (e.g. "John Doe@gmail.com")
+     *
+     * @param string $name
+     * @return string
+     */
+    private static function clean_name(string $name): string {
+        // If the name contains @, strip everything from @ onward
+        if (str_contains($name, '@')) {
+            $name = preg_replace('/@.*$/', '', $name);
+        }
+        return trim($name);
     }
 
     /**
