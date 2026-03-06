@@ -280,9 +280,8 @@ class DirectPay_Mondial_Relay_API {
                 'TReprise'       => '',
                 'Montage'        => '',
                 'TRDV'           => '',
-                'Assession'      => '',
+                'Assurance'      => '',
                 'Instructions'   => '',
-                'Texte'          => self::sanitize_mr($shipment_data['product_name'] ?? '', 30),
             ];
 
             // Set relay point for delivery if applicable
