@@ -238,7 +238,7 @@ class DirectPay_Mondial_Relay_API {
             // Build parameters — ALL fields in MR's expected order for WSI2_CreationExpedition
             $params = [
                 'Enseigne'       => $creds['enseigne'],
-                'ModeCol'        => 'CCC', // Drop-off at relay by sender
+                'ModeCol'        => 'REL', // Sender drops off at relay point
                 'ModeLiv'        => $mode_livraison,
                 'NDossier'       => substr($shipment_data['reference'] ?? '', 0, 15),
                 'NClient'        => substr($shipment_data['reference'] ?? '', 0, 9),
@@ -518,6 +518,7 @@ class DirectPay_Mondial_Relay_API {
             '80' => 'Code tracing: commande enregistrée',
             '81' => 'Code tracing: en cours de traitement',
             '82' => 'Code tracing: livré',
+            '92' => 'Mode de collecte non autorisé pour cette enseigne',
             '94' => 'Erreur d\'authentification',
             '95' => 'Compte non habilité (les comptes de test ne supportent pas la création d\'expéditions)',
             '97' => 'Erreur interne',
