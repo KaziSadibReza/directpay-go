@@ -290,6 +290,17 @@ class DirectPay_Mondial_Relay_API {
                 $params['LIV_Rel']      = $shipment_data['relay_id'];
             }
 
+            // ModeCol=REL requires a collection relay point — find one near sender
+            $sender_country = strtoupper($shipment_data['sender_country'] ?? 'FR');
+            $sender_postcode = $shipment_data['sender_postcode'] ?? '';
+            if ($sender_postcode) {
+                $nearby = self::search_relay_points($sender_country, $sender_postcode, 1);
+                if (!is_wp_error($nearby) && !empty($nearby)) {
+                    $params['COL_Rel_Pays'] = $sender_country;
+                    $params['COL_Rel']      = $nearby[0]['id'];
+                }
+            }
+
             // Generate security hash (all parameter values concatenated + private_key)
             $hash_values = array_values($params);
             $params['Security'] = self::generate_security_hash($hash_values, $creds['private_key']);
