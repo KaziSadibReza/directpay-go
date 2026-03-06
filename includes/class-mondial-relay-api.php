@@ -235,10 +235,10 @@ class DirectPay_Mondial_Relay_API {
                 );
             }
 
-            // Build parameters — ALL fields in MR's expected order for WSI2_CreationExpedition
+            // Build parameters — ALL fields in MR's expected order for WSI2_CreationEtiquette
             $params = [
                 'Enseigne'       => $creds['enseigne'],
-                'ModeCol'        => 'REL', // Sender drops off at relay point
+                'ModeCol'        => 'CCC', // Drop-off at MR counter/agency
                 'ModeLiv'        => $mode_livraison,
                 'NDossier'       => substr($shipment_data['reference'] ?? '', 0, 15),
                 'NClient'        => substr($shipment_data['reference'] ?? '', 0, 9),
@@ -290,48 +290,47 @@ class DirectPay_Mondial_Relay_API {
                 $params['LIV_Rel']      = $shipment_data['relay_id'];
             }
 
-            // ModeCol=REL requires a collection relay point — find one near sender
-            $sender_country = strtoupper($shipment_data['sender_country'] ?? 'FR');
-            $sender_postcode = $shipment_data['sender_postcode'] ?? '';
-            if ($sender_postcode) {
-                $nearby = self::search_relay_points($sender_country, $sender_postcode, 1);
-                if (!is_wp_error($nearby) && !empty($nearby)) {
-                    $params['COL_Rel_Pays'] = $sender_country;
-                    $params['COL_Rel']      = $nearby[0]['id'];
-                }
-            }
-
             // Generate security hash (all parameter values concatenated + private_key)
             $hash_values = array_values($params);
             $params['Security'] = self::generate_security_hash($hash_values, $creds['private_key']);
 
-            error_log('Mondial Relay CreateExpedition Request: ' . json_encode($params));
+            // Texte is part of WSI2_CreationEtiquette but comes AFTER Security (not included in hash)
+            $params['Texte'] = '';
 
-            $response = $client->WSI2_CreationExpedition($params);
-            $result = $response->WSI2_CreationExpeditionResult;
+            error_log('Mondial Relay CreationEtiquette Request: ' . json_encode($params));
+
+            $response = $client->WSI2_CreationEtiquette($params);
+            $result = $response->WSI2_CreationEtiquetteResult;
 
             if (trim($result->STAT) !== '0') {
                 $stat_code = trim($result->STAT);
                 $stat_desc = self::get_error_description($stat_code);
-                error_log('Mondial Relay CreateExpedition Error - STAT: ' . $stat_code . ' — ' . $stat_desc);
-                error_log('Mondial Relay CreateExpedition Params Sent: ' . json_encode(array_diff_key($params, ['Security' => 1])));
+                error_log('Mondial Relay CreationEtiquette Error - STAT: ' . $stat_code . ' — ' . $stat_desc);
+                error_log('Mondial Relay CreationEtiquette Params Sent: ' . json_encode(array_diff_key($params, ['Security' => 1, 'Texte' => 1])));
                 return new WP_Error(
                     'mr_shipment_failed',
                     sprintf(__('Mondial Relay shipment creation failed. Error code: %s — %s', 'directpay-go'), $stat_code, $stat_desc),
-                    ['status' => 400, 'stat' => $stat_code, 'params_sent' => array_diff_key($params, ['Security' => 1])]
+                    ['status' => 400, 'stat' => $stat_code, 'params_sent' => array_diff_key($params, ['Security' => 1, 'Texte' => 1])]
                 );
             }
 
+            $expedition_num = trim($result->ExpeditionNum ?? '');
+            $label_url = trim($result->URL_Etiquette ?? '');
+            if ($label_url && strpos($label_url, 'http://') === 0) {
+                $label_url = str_replace('http://', 'https://', $label_url);
+            }
+
             return [
-                'expedition_num' => trim($result->ExpeditionNum ?? ''),
-                'tracking_url'   => 'https://www.mondialrelay.fr/suivi-de-colis?numeroExpedition=' . trim($result->ExpeditionNum ?? ''),
+                'expedition_num' => $expedition_num,
+                'tracking_url'   => 'https://www.mondialrelay.fr/suivi-de-colis?numeroExpedition=' . $expedition_num,
+                'label_url'      => $label_url,
             ];
 
         } catch (SoapFault $e) {
-            error_log('Mondial Relay SOAP Fault (CreateExpedition): ' . $e->getMessage());
+            error_log('Mondial Relay SOAP Fault (CreationEtiquette): ' . $e->getMessage());
             return new WP_Error('soap_fault', $e->getMessage(), ['status' => 500]);
         } catch (Exception $e) {
-            error_log('Mondial Relay Error (CreateExpedition): ' . $e->getMessage());
+            error_log('Mondial Relay Error (CreationEtiquette): ' . $e->getMessage());
             return new WP_Error('mr_error', $e->getMessage(), ['status' => 500]);
         }
     }
