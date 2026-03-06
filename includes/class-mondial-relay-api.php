@@ -248,16 +248,16 @@ class DirectPay_Mondial_Relay_API {
                 'Expe_Ville'     => self::sanitize_mr($shipment_data['sender_city'] ?? '', 26),
                 'Expe_CP'        => substr($shipment_data['sender_postcode'] ?? '', 0, 10),
                 'Expe_Pays'      => strtoupper($shipment_data['sender_country'] ?? 'FR'),
-                'Expe_Tel1'      => preg_replace('/[^0-9]/', '', $shipment_data['sender_phone'] ?? ''),
-                'Expe_Mail'      => $shipment_data['sender_email'] ?? '',
+                'Expe_Tel1'      => self::sanitize_phone($shipment_data['sender_phone'] ?? ''),
+                'Expe_Mail'      => substr($shipment_data['sender_email'] ?? '', 0, 70),
                 'Dest_Langage'   => 'FR',
                 'Dest_Ad1'       => self::sanitize_mr($shipment_data['recipient_name'] ?? '', 32),
                 'Dest_Ad3'       => self::sanitize_mr($shipment_data['recipient_address'] ?? '', 32),
                 'Dest_Ville'     => self::sanitize_mr($shipment_data['recipient_city'] ?? '', 26),
                 'Dest_CP'        => substr($shipment_data['recipient_postcode'] ?? '', 0, 10),
                 'Dest_Pays'      => strtoupper($shipment_data['recipient_country'] ?? 'FR'),
-                'Dest_Tel1'      => preg_replace('/[^0-9]/', '', $shipment_data['recipient_phone'] ?? ''),
-                'Dest_Mail'      => $shipment_data['recipient_email'] ?? '',
+                'Dest_Tel1'      => self::sanitize_phone($shipment_data['recipient_phone'] ?? ''),
+                'Dest_Mail'      => substr($shipment_data['recipient_email'] ?? '', 0, 70),
                 'Poids'          => (string) $weight,
                 'NbColis'        => (string) $nb_colis,
                 'CRT_Valeur'     => '0',
@@ -430,6 +430,30 @@ class DirectPay_Mondial_Relay_API {
         $str = preg_replace('/[^a-zA-Z0-9\s\-\/\.]/', '', $str);
         // Trim and limit length
         return substr(trim($str), 0, $max_length);
+    }
+
+    /**
+     * Sanitize phone number for Mondial Relay API
+     * Converts international format (+33 6xx) to local (06xx) and ensures max 10 digits
+     *
+     * @param string $phone
+     * @return string
+     */
+    private static function sanitize_phone(string $phone): string {
+        // Strip all non-digit characters
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+        
+        // Convert French international format (33...) to local (0...)
+        if (strlen($digits) === 11 && str_starts_with($digits, '33')) {
+            $digits = '0' . substr($digits, 2);
+        }
+        // Handle case where + was already stripped: 330761... -> 0761...
+        if (strlen($digits) > 10 && str_starts_with($digits, '33')) {
+            $digits = '0' . substr($digits, 2);
+        }
+        
+        // Ensure max 10 digits
+        return substr($digits, 0, 10);
     }
 
     /**

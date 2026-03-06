@@ -414,9 +414,11 @@ class DirectPay_Shipping_Handler {
         }
 
         $settings = [
-            'enseigne'    => sanitize_text_field($data['enseigne']),
-            'private_key' => sanitize_text_field($data['private_key']),
-            'brand_id'    => sanitize_text_field($data['brand_id'] ?? ''),
+            'enseigne'      => sanitize_text_field($data['enseigne']),
+            'private_key'   => sanitize_text_field($data['private_key']),
+            'brand_id'      => sanitize_text_field($data['brand_id'] ?? ''),
+            'sender_phone'  => sanitize_text_field($data['sender_phone'] ?? ''),
+            'sender_email'  => sanitize_email($data['sender_email'] ?? ''),
         ];
 
         update_option('directpay_mondial_relay_api', $settings);
@@ -438,10 +440,12 @@ class DirectPay_Shipping_Handler {
         $settings = get_option('directpay_mondial_relay_api', []);
 
         return new WP_REST_Response([
-            'enseigne'   => $settings['enseigne'] ?? '',
-            'private_key' => $settings['private_key'] ?? '',
-            'brand_id'   => $settings['brand_id'] ?? '',
-            'configured' => !empty($settings['enseigne']) && !empty($settings['private_key']),
+            'enseigne'     => $settings['enseigne'] ?? '',
+            'private_key'  => $settings['private_key'] ?? '',
+            'brand_id'     => $settings['brand_id'] ?? '',
+            'sender_phone' => $settings['sender_phone'] ?? '',
+            'sender_email' => $settings['sender_email'] ?? '',
+            'configured'   => !empty($settings['enseigne']) && !empty($settings['private_key']),
         ], 200);
     }
 
@@ -552,8 +556,8 @@ class DirectPay_Shipping_Handler {
             'sender_city'       => $store_city,
             'sender_postcode'   => $store_postcode,
             'sender_country'    => $store_country,
-            'sender_phone'      => get_option('woocommerce_store_phone', ''),
-            'sender_email'      => get_option('admin_email', ''),
+            'sender_phone'      => $this->get_sender_phone(),
+            'sender_email'      => $this->get_sender_email(),
 
             // Recipient (customer from primary order)
             'recipient_name'    => $primary_order->get_shipping_first_name() . ' ' . $primary_order->get_shipping_last_name(),
@@ -643,6 +647,31 @@ class DirectPay_Shipping_Handler {
             'label_url'      => $result['label_url'],
             'expedition_num' => $expedition,
         ], 200);
+    }
+
+    /**
+     * Get sender phone from MR settings, falling back to admin user phone.
+     */
+    private function get_sender_phone() {
+        $mr_settings = get_option('directpay_mondial_relay_api', []);
+        if (!empty($mr_settings['sender_phone'])) {
+            return $mr_settings['sender_phone'];
+        }
+        // Fallback: admin user phone
+        $admin_id = get_option('admin_user', 1);
+        $phone = get_user_meta($admin_id, 'billing_phone', true);
+        return $phone ?: '';
+    }
+
+    /**
+     * Get sender email from MR settings, falling back to admin email.
+     */
+    private function get_sender_email() {
+        $mr_settings = get_option('directpay_mondial_relay_api', []);
+        if (!empty($mr_settings['sender_email'])) {
+            return $mr_settings['sender_email'];
+        }
+        return get_option('admin_email', '');
     }
 }
 
