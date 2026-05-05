@@ -32,7 +32,7 @@ class DirectPay_Go_Order {
             $shipping_method = $data['shipping_method'] ?? null;
             $payment_method = sanitize_text_field($data['payment_method']);
             $locale = $data['locale'] ?? get_locale();
-            $payment_intent_id = $data['payment_intent_id'] ?? null;
+            $payment_intent_id = isset($data['payment_intent_id']) ? sanitize_text_field($data['payment_intent_id']) : null;
             $pickup_point = $data['pickup_point'] ?? null;
             $shipping_cost = isset($data['shipping_cost']) ? floatval($data['shipping_cost']) : 0;
             $has_active_session = $data['has_active_session'] ?? false;
@@ -192,8 +192,28 @@ class DirectPay_Go_Order {
             $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
             
             if ($payment_method === 'stripe' && $payment_intent_id) {
-                // Stripe payment confirmed - payment_complete() sets status to processing
-                $order->payment_complete($payment_intent_id);
+                $intent_status = $this->get_stripe_payment_intent_status($payment_intent_id);
+                if (is_wp_error($intent_status)) {
+                    $order->set_status('pending', __('Awaiting payment confirmation', 'directpay-go'));
+                    $order->add_order_note(
+                        sprintf(
+                            __('Could not verify Stripe payment intent %s. Order kept pending. Error: %s', 'directpay-go'),
+                            $payment_intent_id,
+                            $intent_status->get_error_message()
+                        )
+                    );
+                } elseif (in_array($intent_status, ['succeeded', 'processing', 'requires_capture'], true)) {
+                    // Stripe payment confirmed - payment_complete() sets status to processing
+                    $order->payment_complete($payment_intent_id);
+                } else {
+                    $order->set_status(
+                        'pending',
+                        sprintf(
+                            __('Stripe payment not completed (status: %s).', 'directpay-go'),
+                            $intent_status
+                        )
+                    );
+                }
             } elseif (isset($available_gateways[$payment_method]) && $available_gateways[$payment_method]->id === 'cod') {
                 // COD
                 $order->set_status('processing', __('Payment via COD', 'directpay-go'));
@@ -278,6 +298,52 @@ class DirectPay_Go_Order {
                 $e->getMessage()
             );
         }
+    }
+
+    /**
+     * Get Stripe payment intent status directly from Stripe API
+     *
+     * @param string $payment_intent_id
+     * @return string|WP_Error
+     */
+    private function get_stripe_payment_intent_status($payment_intent_id) {
+        $stripe_settings = get_option('woocommerce_stripe_settings', []);
+        $test_mode = (!empty($stripe_settings['testmode']) && 'yes' === $stripe_settings['testmode']);
+        $secret_key = $test_mode
+            ? ($stripe_settings['test_secret_key'] ?? '')
+            : ($stripe_settings['secret_key'] ?? '');
+
+        if (empty($secret_key)) {
+            return new WP_Error('missing_secret_key', __('Stripe secret key not configured', 'directpay-go'));
+        }
+
+        $response = wp_remote_get(
+            'https://api.stripe.com/v1/payment_intents/' . rawurlencode($payment_intent_id),
+            [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $secret_key,
+                ],
+                'timeout' => 20,
+            ]
+        );
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code >= 400) {
+            $message = $body['error']['message'] ?? __('Stripe API error while verifying payment intent', 'directpay-go');
+            return new WP_Error('stripe_intent_verification_failed', $message);
+        }
+
+        if (empty($body['status'])) {
+            return new WP_Error('stripe_intent_missing_status', __('Stripe payment intent status not found', 'directpay-go'));
+        }
+
+        return sanitize_text_field($body['status']);
     }
     
     /**

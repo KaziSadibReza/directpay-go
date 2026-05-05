@@ -54,6 +54,34 @@ class DirectPay_Payment_Method_Integration {
                     'required' => true,
                     'type' => 'number',
                 ],
+                'email' => [
+                    'required' => false,
+                    'type' => 'string',
+                ],
+                'reference' => [
+                    'required' => false,
+                    'type' => 'string',
+                ],
+                'customer_name' => [
+                    'required' => false,
+                    'type' => 'string',
+                ],
+                'phone' => [
+                    'required' => false,
+                    'type' => 'string',
+                ],
+                'billing' => [
+                    'required' => false,
+                    'type' => 'object',
+                ],
+                'shipping' => [
+                    'required' => false,
+                    'type' => 'object',
+                ],
+                'save_payment_method' => [
+                    'required' => false,
+                    'type' => 'boolean',
+                ],
             ],
         ]);
         
@@ -226,6 +254,13 @@ class DirectPay_Payment_Method_Integration {
             }
             
             $amount = $request->get_param('amount');
+            $email = sanitize_email((string) $request->get_param('email'));
+            $reference = sanitize_text_field((string) $request->get_param('reference'));
+            $customer_name = sanitize_text_field((string) $request->get_param('customer_name'));
+            $phone = sanitize_text_field((string) $request->get_param('phone'));
+            $save_payment_method = filter_var($request->get_param('save_payment_method'), FILTER_VALIDATE_BOOLEAN);
+            $billing = $request->get_param('billing');
+            $shipping = $request->get_param('shipping');
             
             if (!$amount || $amount <= 0) {
                 error_log('DirectPay Error: Invalid amount - ' . $amount);
@@ -255,10 +290,90 @@ class DirectPay_Payment_Method_Integration {
             
             // Create Payment Intent via Stripe API
             // Don't specify payment_method_types - let Stripe Payment Element handle it automatically
-            $intent_data = apply_filters('wc_stripe_generate_payment_intent_args', [
+            $intent_data = [
                 'amount' => $amount_cents,
                 'currency' => $currency,
-            ]);
+                'automatic_payment_methods' => [
+                    'enabled' => true,
+                ],
+                'metadata' => [
+                    'source' => 'directpay_go',
+                ],
+            ];
+
+            if (!empty($reference)) {
+                $intent_data['metadata']['directpay_reference'] = $reference;
+            }
+
+            if (!empty($customer_name)) {
+                $intent_data['metadata']['customer_name'] = $customer_name;
+            }
+
+            if (!empty($email) && is_email($email)) {
+                $intent_data['metadata']['customer_email'] = $email;
+            }
+
+            if (!empty($phone)) {
+                $intent_data['metadata']['customer_phone'] = $phone;
+            }
+
+            if (is_array($billing)) {
+                $intent_data['metadata']['billing_country'] = sanitize_text_field((string) ($billing['country'] ?? ''));
+                $intent_data['metadata']['billing_city'] = sanitize_text_field((string) ($billing['city'] ?? ''));
+                $intent_data['metadata']['billing_postcode'] = sanitize_text_field((string) ($billing['postal_code'] ?? ''));
+            }
+
+            if (!empty($email) && is_email($email)) {
+                $intent_data['receipt_email'] = $email;
+            }
+
+            if (!empty($reference)) {
+                $intent_data['description'] = 'DirectPay Ref: ' . $reference;
+            }
+
+            if ($save_payment_method) {
+                $intent_data['setup_future_usage'] = 'off_session';
+            }
+
+            if (is_array($shipping)) {
+                $shipping_name = sanitize_text_field((string) ($shipping['name'] ?? ''));
+                $shipping_phone = sanitize_text_field((string) ($shipping['phone'] ?? ''));
+                $shipping_address = is_array($shipping['address'] ?? null) ? $shipping['address'] : [];
+
+                $shipping_payload = [
+                    'name' => $shipping_name,
+                    'phone' => $shipping_phone,
+                    'address' => [
+                        'line1' => sanitize_text_field((string) ($shipping_address['line1'] ?? '')),
+                        'line2' => sanitize_text_field((string) ($shipping_address['line2'] ?? '')),
+                        'city' => sanitize_text_field((string) ($shipping_address['city'] ?? '')),
+                        'state' => sanitize_text_field((string) ($shipping_address['state'] ?? '')),
+                        'postal_code' => sanitize_text_field((string) ($shipping_address['postal_code'] ?? '')),
+                        'country' => sanitize_text_field((string) ($shipping_address['country'] ?? '')),
+                    ],
+                ];
+
+                // Stripe requires a full shipping address when shipping is sent.
+                if (
+                    !empty($shipping_payload['name']) &&
+                    !empty($shipping_payload['address']['line1']) &&
+                    !empty($shipping_payload['address']['city']) &&
+                    !empty($shipping_payload['address']['postal_code']) &&
+                    !empty($shipping_payload['address']['country'])
+                ) {
+                    $intent_data['shipping'] = $shipping_payload;
+                }
+            }
+
+            if (!empty($reference)) {
+                $suffix = strtoupper(preg_replace('/[^A-Za-z0-9 ]/', '', $reference));
+                $suffix = trim(substr($suffix, 0, 22));
+                if (!empty($suffix)) {
+                    $intent_data['statement_descriptor_suffix'] = $suffix;
+                }
+            }
+
+            $intent_data = apply_filters('wc_stripe_generate_payment_intent_args', $intent_data);
             
             // Log the request data for debugging
             error_log('DirectPay Creating Payment Intent: ' . json_encode($intent_data));

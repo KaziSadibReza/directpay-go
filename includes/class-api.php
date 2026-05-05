@@ -1070,20 +1070,46 @@ class DirectPay_Go_API {
             // Calculate totals
             $order->calculate_totals();
             
-            // Payment was already confirmed by Stripe on the client side
-            // payment_complete() sets status to processing automatically
-            $order->payment_complete($payment_intent_id);
+            // Verify Stripe payment intent status before marking order paid
+            $intent_status = $this->get_stripe_payment_intent_status($payment_intent_id);
+            if (is_wp_error($intent_status)) {
+                $order->set_status('pending', __('Awaiting payment confirmation', 'directpay-go'));
+                $order->add_order_note(
+                    sprintf(
+                        __('Could not verify Stripe payment intent %s. Order kept pending. Error: %s', 'directpay-go'),
+                        $payment_intent_id,
+                        $intent_status->get_error_message()
+                    )
+                );
+            } elseif (in_array($intent_status, ['succeeded', 'processing', 'requires_capture'], true)) {
+                $order->payment_complete($payment_intent_id);
+            } else {
+                $order->set_status(
+                    'pending',
+                    sprintf(
+                        __('Stripe payment not completed (status: %s).', 'directpay-go'),
+                        $intent_status
+                    )
+                );
+            }
             
             // Add order note
-            $order->add_order_note(sprintf(
-                __('Express Checkout payment completed. Reference: %s', 'directpay-go'),
-                $reference
-            ));
+            if (in_array($intent_status, ['succeeded', 'processing', 'requires_capture'], true)) {
+                $order->add_order_note(sprintf(
+                    __('Express Checkout payment completed. Reference: %s', 'directpay-go'),
+                    $reference
+                ));
+            } else {
+                $order->add_order_note(sprintf(
+                    __('Express Checkout order created but payment is not completed yet. Reference: %s', 'directpay-go'),
+                    $reference
+                ));
+            }
             
             // Save order
             $order->save();
             
-            error_log("DirectPay: Order created and marked as processing: " . $order->get_id());
+            error_log("DirectPay: Express checkout order created with status " . $order->get_status() . ": " . $order->get_id());
             error_log("DirectPay: Order total: " . $order->get_total());
             error_log("DirectPay: Reference: " . $reference);
             
@@ -1135,6 +1161,56 @@ class DirectPay_Go_API {
             'order_id' => $order->get_id(),
             'status' => $order->get_status(),
         ], 200);
+    }
+
+    /**
+     * Get Stripe payment intent status directly from Stripe API
+     *
+     * @param string $payment_intent_id
+     * @return string|WP_Error
+     */
+    private function get_stripe_payment_intent_status($payment_intent_id) {
+        if (empty($payment_intent_id)) {
+            return new WP_Error('missing_payment_intent', __('Missing Stripe payment intent ID', 'directpay-go'));
+        }
+
+        $stripe_settings = get_option('woocommerce_stripe_settings', []);
+        $test_mode = (!empty($stripe_settings['testmode']) && 'yes' === $stripe_settings['testmode']);
+        $secret_key = $test_mode
+            ? ($stripe_settings['test_secret_key'] ?? '')
+            : ($stripe_settings['secret_key'] ?? '');
+
+        if (empty($secret_key)) {
+            return new WP_Error('missing_secret_key', __('Stripe secret key not configured', 'directpay-go'));
+        }
+
+        $response = wp_remote_get(
+            'https://api.stripe.com/v1/payment_intents/' . rawurlencode($payment_intent_id),
+            [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $secret_key,
+                ],
+                'timeout' => 20,
+            ]
+        );
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code >= 400) {
+            $message = $body['error']['message'] ?? __('Stripe API error while verifying payment intent', 'directpay-go');
+            return new WP_Error('stripe_intent_verification_failed', $message);
+        }
+
+        if (empty($body['status'])) {
+            return new WP_Error('stripe_intent_missing_status', __('Stripe payment intent status not found', 'directpay-go'));
+        }
+
+        return sanitize_text_field($body['status']);
     }
 }
 
